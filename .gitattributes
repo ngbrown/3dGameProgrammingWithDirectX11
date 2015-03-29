@@ -1,0 +1,28 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Leave Visual Studio files alone
+*.sln -text
+*.DotSettings -text
+*.filters -text
+*.vcxproj -text
+*.csproj -txt
+
+
+# Custom for Visual Studio
+*.cs     diff=csharp
+*.c      diff=cpp
+*.cpp    diff=cpp
+*.h      diff=cpp
+
+# Standard to msysgit
+*.doc	 diff=astextplain
+*.DOC	 diff=astextplain
+*.docx diff=astextplain
+*.DOCX diff=astextplain
+*.dot  diff=astextplain
+*.DOT  diff=astextplain
+*.pdf  diff=astextplain
+*.PDF	 diff=astextplain
+*.rtf	 diff=astextplain
+*.RTF	 diff=astextplain
