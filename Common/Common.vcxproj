@@ -19,6 +19,7 @@
     <ClInclude Include="LightHelper.h" />
     <ClInclude Include="MathHelper.h" />
     <ClInclude Include="ShaderHelper.h" />
+    <ClInclude Include="Trace.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="d3dApp.cpp" />
@@ -27,6 +28,7 @@
     <ClCompile Include="GameTimer.cpp" />
     <ClCompile Include="MathHelper.cpp" />
     <ClCompile Include="ShaderHelper.cpp" />
+    <ClCompile Include="Trace.cpp" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{F3D44507-C858-4508-8D9A-4F294C18DCA8}</ProjectGuid>
