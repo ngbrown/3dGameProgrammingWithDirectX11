@@ -9,6 +9,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "InitDirect3D", "InitDirect3
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Common", "Common\Common.vcxproj", "{F3D44507-C858-4508-8D9A-4F294C18DCA8}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BoxDemo", "BoxDemo\BoxDemo.vcxproj", "{918616FC-6D5E-47EB-A6A5-A975327C5AAA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -27,6 +29,10 @@ Global
 		{F3D44507-C858-4508-8D9A-4F294C18DCA8}.Debug|Win32.Build.0 = Debug|Win32
 		{F3D44507-C858-4508-8D9A-4F294C18DCA8}.Release|Win32.ActiveCfg = Release|Win32
 		{F3D44507-C858-4508-8D9A-4F294C18DCA8}.Release|Win32.Build.0 = Release|Win32
+		{918616FC-6D5E-47EB-A6A5-A975327C5AAA}.Debug|Win32.ActiveCfg = Debug|Win32
+		{918616FC-6D5E-47EB-A6A5-A975327C5AAA}.Debug|Win32.Build.0 = Debug|Win32
+		{918616FC-6D5E-47EB-A6A5-A975327C5AAA}.Release|Win32.ActiveCfg = Release|Win32
+		{918616FC-6D5E-47EB-A6A5-A975327C5AAA}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
