@@ -323,7 +323,8 @@ void ShapesApp::BuildGeometryBuffers()
 	GeometryGenerator geoGen;
 	geoGen.CreateBox(1.0f, 1.0f, 1.0f, box);
 	geoGen.CreateGrid(20.0f, 30.0f, 60, 40, grid);
-	geoGen.CreateSphere(0.5f, 20, 20, sphere);
+	//geoGen.CreateSphere(0.5f, 20, 20, sphere);
+	geoGen.CreateGeosphere(0.5f, 2, sphere);
 	geoGen.CreateCylinder(0.5f, 0.3f, 3.0f, 20, 20, cylinder);
 
 	// Cache the vertex offsets to each object in the concatenated vertex buffer.
