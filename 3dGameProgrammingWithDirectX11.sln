@@ -13,6 +13,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BoxDemo", "BoxDemo\BoxDemo.
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "HillsDemo", "HillsDemo\HillsDemo.vcxproj", "{A1075216-5A79-4C1D-8A94-9D55400217B1}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ShapesDemo", "ShapesDemo\ShapesDemo.vcxproj", "{9C6073C5-4E76-4E0F-B9C7-CCA41E8EF16A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -39,6 +41,10 @@ Global
 		{A1075216-5A79-4C1D-8A94-9D55400217B1}.Debug|Win32.Build.0 = Debug|Win32
 		{A1075216-5A79-4C1D-8A94-9D55400217B1}.Release|Win32.ActiveCfg = Release|Win32
 		{A1075216-5A79-4C1D-8A94-9D55400217B1}.Release|Win32.Build.0 = Release|Win32
+		{9C6073C5-4E76-4E0F-B9C7-CCA41E8EF16A}.Debug|Win32.ActiveCfg = Debug|Win32
+		{9C6073C5-4E76-4E0F-B9C7-CCA41E8EF16A}.Debug|Win32.Build.0 = Debug|Win32
+		{9C6073C5-4E76-4E0F-B9C7-CCA41E8EF16A}.Release|Win32.ActiveCfg = Release|Win32
+		{9C6073C5-4E76-4E0F-B9C7-CCA41E8EF16A}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
