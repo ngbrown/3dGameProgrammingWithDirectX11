@@ -15,6 +15,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "HillsDemo", "HillsDemo\Hill
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ShapesDemo", "ShapesDemo\ShapesDemo.vcxproj", "{9C6073C5-4E76-4E0F-B9C7-CCA41E8EF16A}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "SkullDemo", "SkullDemo\SkullDemo.vcxproj", "{7FBDE512-2027-47C5-8DB1-42D2E25273D9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -45,6 +47,10 @@ Global
 		{9C6073C5-4E76-4E0F-B9C7-CCA41E8EF16A}.Debug|Win32.Build.0 = Debug|Win32
 		{9C6073C5-4E76-4E0F-B9C7-CCA41E8EF16A}.Release|Win32.ActiveCfg = Release|Win32
 		{9C6073C5-4E76-4E0F-B9C7-CCA41E8EF16A}.Release|Win32.Build.0 = Release|Win32
+		{7FBDE512-2027-47C5-8DB1-42D2E25273D9}.Debug|Win32.ActiveCfg = Debug|Win32
+		{7FBDE512-2027-47C5-8DB1-42D2E25273D9}.Debug|Win32.Build.0 = Debug|Win32
+		{7FBDE512-2027-47C5-8DB1-42D2E25273D9}.Release|Win32.ActiveCfg = Release|Win32
+		{7FBDE512-2027-47C5-8DB1-42D2E25273D9}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
