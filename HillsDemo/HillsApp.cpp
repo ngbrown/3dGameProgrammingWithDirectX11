@@ -2,6 +2,8 @@
 // HillsApp.cpp by Frank Luna (C) 2011 All Rights Reserved.
 //
 // Demonstrates drawing hills using a grid and 2D function to set the height of each vertex.
+// Demonstrates dynamic vertex buffers by performing an animated wave simulation where
+// the vertex buffers are updated every frame with the new snapshot of the wave simulation.
 //
 // Controls:
 //		Hold the left mouse button down and move the mouse to rotate.
@@ -18,6 +20,7 @@
 #include <GeometryGenerator.h>
 
 #include "cbPerObject.h"
+#include "Waves.h"
 
 using namespace DirectX;
 using namespace DirectX::PackedVector;
@@ -38,6 +41,7 @@ public:
 	bool Init();				// override
 	void OnResize();			// override
 	void UpdateScene(float dt);	// implement pure virtual
+	void ApplyWorldViewProj(const XMMATRIX& worldViewProj);
 	void DrawScene(); 			// implement pure virtual
 
 	void OnMouseDown(WPARAM btnState, int x, int y);	// override
@@ -47,24 +51,37 @@ public:
 private:
 	float GetHeight(float x, float z) const;
 	void BuildGeometryBuffers();
+	void BuildLandGeometryBuffers();
+	void BuildWavesGeometryBuffers();
 	void BuildFX();
 	void BuildVertexLayout();
 	void BuildRasterState();
 
 private:
 	ConstantBuffer<cbPerObject> mObjectConstantBuffer;
-	ID3D11Buffer* mVB;
-	ID3D11Buffer* mIB;
+	ID3D11Buffer* mLandVB;
+	ID3D11Buffer* mLandIB;
+	ID3D11Buffer* mWavesVB;
+	ID3D11Buffer* mWavesIB;
+
 	ID3DBlob* mPSBlob;
 	ID3DBlob* mVSBlob;
 	ID3D11PixelShader* mPixelShader;
 	ID3D11VertexShader* mVertexShader;
 
 	ID3D11RasterizerState* mRasterState;
+	ID3D11RasterizerState* mWireframeRS;
 
 	ID3D11InputLayout* mInputLayout;
 
-	XMFLOAT4X4 mWorld;
+	// Define transformations from local spaces to world space.
+	XMFLOAT4X4 mGridWorld;
+	XMFLOAT4X4 mWavesWorld;
+
+	UINT mGridIndexCount;
+
+	Waves mWaves;
+
 	XMFLOAT4X4 mView;
 	XMFLOAT4X4 mProj;
 
@@ -73,7 +90,6 @@ private:
 	float mRadius;
 
 	POINT mLastMousePos;
-	UINT mGridIndexCount;
 };
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
@@ -95,12 +111,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 
 HillsApp::HillsApp(HINSTANCE hInstance)
 	: D3DApp(hInstance),
-	mVB(0),
-	mIB(0),
-	mInputLayout(0),
+	mLandVB(nullptr),
+	mLandIB(nullptr),
+	mWavesVB(nullptr),
+	mWavesIB(nullptr),
+	mRasterState(nullptr),
+	mWireframeRS(nullptr),
+	mInputLayout(nullptr),
+	mGridIndexCount(0),
 	mTheta(1.5f*MathHelper::Pi),
-	mPhi(0.25f*MathHelper::Pi),
-	mRadius(5.0f)
+	mPhi(0.1f*MathHelper::Pi),
+	mRadius(20.0f)
 {
 	mMainWndCaption = L"Hills Demo";
 
@@ -108,22 +129,28 @@ HillsApp::HillsApp(HINSTANCE hInstance)
 	mLastMousePos.y = 0;
 
 	XMMATRIX I = XMMatrixIdentity();
-	XMStoreFloat4x4(&mWorld, I);
+	XMStoreFloat4x4(&mGridWorld, I);
+	XMStoreFloat4x4(&mWavesWorld, I);
 	XMStoreFloat4x4(&mView, I);
 	XMStoreFloat4x4(&mProj, I);
 }
 
 HillsApp::~HillsApp()
 {
-	ReleaseCOM(mVB);
-	ReleaseCOM(mIB);
+	ReleaseCOM(mLandVB);
+	ReleaseCOM(mLandIB);
+	ReleaseCOM(mWavesVB);
+	ReleaseCOM(mWavesIB);
 	ReleaseCOM(mInputLayout);
+	ReleaseCOM(mWireframeRS);
 }
 
 bool HillsApp::Init()
 {
 	if (!D3DApp::Init())
 		return false;
+
+	mWaves.Init(200, 200, 0.8f, 0.03f, 3.25f, 0.4f);
 
 	BuildGeometryBuffers();
 	BuildFX();
@@ -157,6 +184,51 @@ void HillsApp::UpdateScene(float dt)
 
 	XMMATRIX V = XMMatrixLookAtLH(pos, target, up);
 	XMStoreFloat4x4(&mView, V);
+
+	//
+	// Every quarter second, generate a random wave.
+	//
+	static float t_base = 0.0f;
+	if ((mTimer.TotalTime() - t_base) >= 0.25f)
+	{
+		t_base += 0.25f;
+
+		DWORD i = 5 + rand() % 190;
+		DWORD j = 5 + rand() % 190;
+
+		float r = MathHelper::RandF(1.0f, 2.0f);
+
+		mWaves.Disturb(i, j, r);
+	}
+
+	mWaves.Update(dt);
+
+	//
+	// Update the wave vertex buffer with the new solution.
+	//
+
+	D3D11_MAPPED_SUBRESOURCE mappedData;
+	HR(md3dImmediateContext->Map(mWavesVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedData));
+
+	Vertex* v = reinterpret_cast<Vertex*>(mappedData.pData);
+	for (UINT i = 0; i < mWaves.VertexCount(); i++)
+	{
+		v[i].Pos = mWaves[i];
+		v[i].Color = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+	}
+
+	md3dImmediateContext->Unmap(mWavesVB, 0);
+}
+
+void HillsApp::ApplyWorldViewProj(const XMMATRIX& worldViewProj)
+{
+	// Use a constant buffer. Effect framework deprecated
+	cbPerObject mPerObjectCB;
+	XMStoreFloat4x4(&mPerObjectCB.mWorldViewProj, XMMatrixTranspose(worldViewProj));
+	mObjectConstantBuffer.Data = mPerObjectCB;
+	mObjectConstantBuffer.ApplyChanges(md3dImmediateContext);
+	ID3D11Buffer* buffer = mObjectConstantBuffer.Buffer();
+	md3dImmediateContext->VSSetConstantBuffers(0, 1, &buffer);
 }
 
 void HillsApp::DrawScene()
@@ -173,31 +245,37 @@ void HillsApp::DrawScene()
 
 	UINT stride = sizeof(Vertex);
 	UINT offset = 0;
-	md3dImmediateContext->IASetVertexBuffers(0, 1, &mVB, &stride, &offset);
-	md3dImmediateContext->IASetIndexBuffer(mIB, DXGI_FORMAT_R32_UINT, 0);
 
 	// Set constants
-	XMMATRIX world = XMLoadFloat4x4(&mWorld);
 	XMMATRIX view = XMLoadFloat4x4(&mView);
 	XMMATRIX proj = XMLoadFloat4x4(&mProj);
 
-	// transpose WVP matrix unless vertix shader is expecting row_major format
-	XMMATRIX worldViewProj = XMMatrixTranspose(world*view*proj);
+	//
+	// Draw the Land
+	//
+	md3dImmediateContext->IASetVertexBuffers(0, 1, &mLandVB, &stride, &offset);
+	md3dImmediateContext->IASetIndexBuffer(mLandIB, DXGI_FORMAT_R32_UINT, 0);
 
-	// Use a constant buffer. Effect framework deprecated
-	cbPerObject mPerObjectCB;
-	XMStoreFloat4x4(&mPerObjectCB.mWorldViewProj, worldViewProj);
-	mObjectConstantBuffer.Data = mPerObjectCB;
-	mObjectConstantBuffer.ApplyChanges(md3dImmediateContext);
-
-	auto buffer = mObjectConstantBuffer.Buffer();
-	md3dImmediateContext->VSSetConstantBuffers(0, 1, &buffer);
-
-	// Set raster state
-	md3dImmediateContext->RSSetState(mRasterState);
-
-	// 36 indices for the box.
+	XMMATRIX world = XMLoadFloat4x4(&mGridWorld);
+	XMMATRIX worldViewProj = world*view*proj;
+	ApplyWorldViewProj(worldViewProj);
 	md3dImmediateContext->DrawIndexed(mGridIndexCount, 0, 0);
+
+	//
+	// Draw the waves.
+	//
+	md3dImmediateContext->RSSetState(mWireframeRS);
+
+	md3dImmediateContext->IASetVertexBuffers(0, 1, &mWavesVB, &stride, &offset);
+	md3dImmediateContext->IASetIndexBuffer(mWavesIB, DXGI_FORMAT_R32_UINT, 0);
+
+	world = XMLoadFloat4x4(&mGridWorld);
+	worldViewProj = world*view*proj;
+	ApplyWorldViewProj(worldViewProj);
+	md3dImmediateContext->DrawIndexed(3*mWaves.TriangleCount(), 0, 0);
+
+	// Restore default.
+	md3dImmediateContext->RSSetState(nullptr);
 
 	HR(mSwapChain->Present(0, 0));
 }
@@ -232,19 +310,25 @@ void HillsApp::OnMouseMove(WPARAM btnState, int x, int y)
 	}
 	else if ((btnState & MK_RBUTTON) != 0)
 	{
-		// Make each pixel correspond to 0.005 unit in the scene.
-		float dx = 0.005f*static_cast<float>(x - mLastMousePos.x);
-		float dy = 0.005f*static_cast<float>(y - mLastMousePos.y);
+		// Make each pixel correspond to 0.01 unit in the scene.
+		float dx = 0.01f*static_cast<float>(x - mLastMousePos.x);
+		float dy = 0.01f*static_cast<float>(y - mLastMousePos.y);
 
 		// Update the camera radius based on input.
 		mRadius += dx - dy;
 
 		// Restrict the radius.
-		mRadius = MathHelper::Clamp(mRadius, 3.0f, 15.0f);
+		mRadius = MathHelper::Clamp(mRadius, 3.0f, 200.0f);
 	}
 
 	mLastMousePos.x = x;
 	mLastMousePos.y = y;
+}
+
+void HillsApp::BuildGeometryBuffers()
+{
+	BuildLandGeometryBuffers();
+	BuildWavesGeometryBuffers();
 }
 
 float HillsApp::GetHeight(float x, float z) const
@@ -252,7 +336,7 @@ float HillsApp::GetHeight(float x, float z) const
 	return 0.3f*(z*sinf(0.1f*x) + x*cosf(0.1f*z));
 }
 
-void HillsApp::BuildGeometryBuffers()
+void HillsApp::BuildLandGeometryBuffers()
 {
 	GeometryGenerator::MeshData grid;
 	GeometryGenerator geoGen;
@@ -312,7 +396,7 @@ void HillsApp::BuildGeometryBuffers()
 	vbd.StructureByteStride = 0;
 	D3D11_SUBRESOURCE_DATA vinitData;
 	vinitData.pSysMem = &vertices[0];
-	HR(md3dDevice->CreateBuffer(&vbd, &vinitData, &mVB));
+	HR(md3dDevice->CreateBuffer(&vbd, &vinitData, &mLandVB));
 
 	//
 	// Pack the indices of all the meshes into one index buffer.
@@ -327,7 +411,56 @@ void HillsApp::BuildGeometryBuffers()
 	ibd.StructureByteStride = 0;
 	D3D11_SUBRESOURCE_DATA iinitData;
 	iinitData.pSysMem = &grid.Indices[0];
-	HR(md3dDevice->CreateBuffer(&ibd, &iinitData, &mIB));
+	HR(md3dDevice->CreateBuffer(&ibd, &iinitData, &mLandIB));
+}
+
+void HillsApp::BuildWavesGeometryBuffers()
+{
+	// Create the vertex buffer.  Note that we allocate space only, as
+	// we will be updating the data every time step of the simulation.
+
+	D3D11_BUFFER_DESC vbd;
+	vbd.Usage = D3D11_USAGE_DYNAMIC;
+	vbd.ByteWidth = sizeof(Vertex) * mWaves.VertexCount();
+	vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+	vbd.MiscFlags = 0;
+	HR(md3dDevice->CreateBuffer(&vbd, nullptr, &mWavesVB));
+
+	// Create the index buffer.  The index buffer is fixed, so we only 
+	// need to create and set once.
+	
+	std::vector<UINT> indices(3 * mWaves.TriangleCount()); // 3 indices per face
+
+	// Iterate over each quad.
+	UINT m = mWaves.RowCount();
+	UINT n = mWaves.ColumnCount();
+	int k = 0;
+	for (UINT i = 0; i < m-1; i++)
+	{
+		for (DWORD j = 0; j < n-1; j++)
+		{
+			indices[k] = i*n + j;
+			indices[k + 1] = i*n + j + 1;
+			indices[k + 2] = (i + 1)*n + j;
+
+			indices[k + 3] = (i + 1)*n + j;
+			indices[k + 4] = i*n + j + 1;
+			indices[k + 5] = (i + 1)*n + j + 1;
+
+			k += 6; // next quad
+		}
+	}
+
+	D3D11_BUFFER_DESC ibd;
+	ibd.Usage = D3D11_USAGE_IMMUTABLE;
+	ibd.ByteWidth = sizeof(UINT) * indices.size();
+	ibd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	ibd.CPUAccessFlags = 0;
+	ibd.MiscFlags = 0;
+	D3D11_SUBRESOURCE_DATA iinitData;
+	iinitData.pSysMem = &indices[0];
+	HR(md3dDevice->CreateBuffer(&ibd, &iinitData, &mWavesIB));
 }
 
 void HillsApp::BuildFX()
@@ -363,4 +496,13 @@ void HillsApp::BuildRasterState()
 	rs.AntialiasedLineEnable = rs.DepthClipEnable = true;
 	mRasterState = nullptr;
 	HR(md3dDevice->CreateRasterizerState(&rs, &mRasterState));
+
+	D3D11_RASTERIZER_DESC wireframeDesc;
+	ZeroMemory(&wireframeDesc, sizeof(D3D11_RASTERIZER_DESC));
+	wireframeDesc.FillMode = D3D11_FILL_WIREFRAME;
+	wireframeDesc.CullMode = D3D11_CULL_BACK;
+	//wireframeDesc.CullMode = D3D11_CULL_NONE;
+	wireframeDesc.FrontCounterClockwise = false;
+	wireframeDesc.DepthClipEnable = true;
+	HR(md3dDevice->CreateRasterizerState(&wireframeDesc, &mWireframeRS));
 }
