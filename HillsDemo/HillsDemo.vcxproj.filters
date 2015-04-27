@@ -15,13 +15,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="SimplePixelShader.hlsl" />
-    <FxCompile Include="SimpleVertexShader.hlsl" />
+    <FxCompile Include="LightingPixelShader.hlsl" />
+    <FxCompile Include="LightingVertexShader.hlsl" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="cbPerObject.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Waves.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -33,5 +30,9 @@
     <ClCompile Include="Waves.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="LightHelper.hlsli" />
+    <None Include="Lighting.hlsli" />
   </ItemGroup>
 </Project>
