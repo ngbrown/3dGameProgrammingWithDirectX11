@@ -559,10 +559,10 @@ void HillsApp::BuildWavesGeometryBuffers()
 void HillsApp::BuildFX()
 {
 	// Load cso files and create shaders
-	HR(ShaderHelper::LoadCompiledShader("LightingPixelShader.cso", &mPSBlob));
+	HR(ShaderHelper::LoadCompiledShader(L"LightingPixelShader.cso", &mPSBlob));
 	HR(md3dDevice->CreatePixelShader(mPSBlob->GetBufferPointer(), mPSBlob->GetBufferSize(), nullptr, &mPixelShader));
 
-	HR(ShaderHelper::LoadCompiledShader("LightingVertexShader.cso", &mVSBlob));
+	HR(ShaderHelper::LoadCompiledShader(L"LightingVertexShader.cso", &mVSBlob));
 	HR(md3dDevice->CreateVertexShader(mVSBlob->GetBufferPointer(), mVSBlob->GetBufferSize(), nullptr, &mVertexShader));
 }
 

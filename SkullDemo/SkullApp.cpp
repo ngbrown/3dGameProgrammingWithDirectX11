@@ -331,10 +331,10 @@ void SkullApp::BuildGeometryBuffers()
 void SkullApp::BuildFX()
 {
 	// Load cso files and create shaders
-	HR(ShaderHelper::LoadCompiledShader("SimplePixelShader.cso", &mPSBlob));
+	HR(ShaderHelper::LoadCompiledShader(L"SimplePixelShader.cso", &mPSBlob));
 	HR(md3dDevice->CreatePixelShader(mPSBlob->GetBufferPointer(), mPSBlob->GetBufferSize(), nullptr, &mPixelShader));
 
-	HR(ShaderHelper::LoadCompiledShader("SimpleVertexShader.cso", &mVSBlob));
+	HR(ShaderHelper::LoadCompiledShader(L"SimpleVertexShader.cso", &mVSBlob));
 	HR(md3dDevice->CreateVertexShader(mVSBlob->GetBufferPointer(), mVSBlob->GetBufferSize(), nullptr, &mVertexShader));
 }
 

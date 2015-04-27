@@ -6,12 +6,12 @@
 
 using namespace std;
 
-HRESULT ShaderHelper::LoadCompiledShader(const char *filename, ID3DBlob **blob)
+HRESULT ShaderHelper::LoadCompiledShader(const std::wstring& filename, ID3DBlob **blob)
 {
 	ifstream ifs(filename, ios::binary);
 	if (ifs.bad() || ifs.fail())
 	{
-		string failmsg = "Failed to load shader from ";
+		wstring failmsg = L"Failed to load shader from ";
 		failmsg.append(filename);
 		return S_FALSE;
 	}
