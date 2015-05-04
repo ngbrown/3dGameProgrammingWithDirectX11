@@ -42,10 +42,14 @@ public:
 
 private:
 	void BuildShapeGeometryBuffers();
+	void BuildSkullGeometryBuffers();
 
 private:
 	ID3D11Buffer* mShapesVB;
 	ID3D11Buffer* mShapesIB;
+
+	ID3D11Buffer* mSkullVB;
+	ID3D11Buffer* mSkullIB;
 
 	DirectionalLight mDirLights[3];
 	Material mGridMat;
@@ -59,7 +63,7 @@ private:
 	XMFLOAT4X4 mCylWorld[10];
 	XMFLOAT4X4 mBoxWorld;
 	XMFLOAT4X4 mGridWorld;
-	XMFLOAT4X4 mCenterSphere;
+	XMFLOAT4X4 mSkullWorld;
 
 	XMFLOAT4X4 mView;
 	XMFLOAT4X4 mProj;
@@ -78,6 +82,8 @@ private:
 	UINT mGridIndexCount;
 	UINT mSphereIndexCount;
 	UINT mCylinderIndexCount;
+
+	UINT mSkullIndexCount;
 
 	UINT mLightCount;
 
@@ -111,6 +117,9 @@ ShapesApp::ShapesApp(HINSTANCE hInstance)
 	: D3DApp(hInstance),
 	mShapesVB(nullptr),
 	mShapesIB(nullptr),
+	mSkullVB(nullptr),
+	mSkullIB(nullptr),
+	mSkullIndexCount(0),
 	mLightCount(1),
 	mEyePosW(0.0f, 0.0f, 0.0f),
 	mTheta(1.5f*MathHelper::Pi),
@@ -127,13 +136,13 @@ ShapesApp::ShapesApp(HINSTANCE hInstance)
 	XMStoreFloat4x4(&mView, I);
 	XMStoreFloat4x4(&mProj, I);
 
-	XMMATRIX boxScale = XMMatrixScaling(2.0f, 1.0f, 2.0f);
+	XMMATRIX boxScale = XMMatrixScaling(3.0f, 1.0f, 3.0f);
 	XMMATRIX boxOffset = XMMatrixTranslation(0.0f, 0.5f, 0.0f);
 	XMStoreFloat4x4(&mBoxWorld, XMMatrixMultiply(boxScale, boxOffset));
 
-	XMMATRIX centerSphereScale = XMMatrixScaling(2.0f, 2.0f, 2.0f);
-	XMMATRIX centerSphereOffset = XMMatrixTranslation(0.0f, 2.0f, 0.0f);
-	XMStoreFloat4x4(&mCenterSphere, XMMatrixMultiply(centerSphereScale, centerSphereOffset));
+	XMMATRIX skullScale = XMMatrixScaling(0.5f, 0.5f, 0.5f);
+	XMMATRIX skullOffset = XMMatrixTranslation(0.0f, 1.0f, 0.0f);
+	XMStoreFloat4x4(&mSkullWorld, XMMatrixMultiply(skullScale, skullOffset));
 
 	for (int i = 0; i < 5; ++i)
 	{
@@ -184,6 +193,8 @@ ShapesApp::~ShapesApp()
 {
 	ReleaseCOM(mShapesVB);
 	ReleaseCOM(mShapesIB);
+	ReleaseCOM(mSkullVB);
+	ReleaseCOM(mSkullIB);
 
 	Effects::DestroyAll();
 	InputLayouts::DestroyAll();
@@ -199,6 +210,7 @@ bool ShapesApp::Init()
 	InputLayouts::InitAll(md3dDevice);
 
 	BuildShapeGeometryBuffers();
+	BuildSkullGeometryBuffers();
 
 	return true;
 }
@@ -305,12 +317,15 @@ void ShapesApp::DrawScene()
 		md3dImmediateContext->DrawIndexed(mSphereIndexCount, mSphereIndexOffset, mSphereVertexOffset);
 	}
 
-	// Draw center sphere.
-	world = XMLoadFloat4x4(&mCenterSphere);
+	// Draw the skull.
+	md3dImmediateContext->IASetVertexBuffers(0, 1, &mSkullVB, &stride, &offset);
+	md3dImmediateContext->IASetIndexBuffer(mSkullIB, DXGI_FORMAT_R32_UINT, 0);
+
+	world = XMLoadFloat4x4(&mSkullWorld);
 	worldInvTranspose = MathHelper::InverseTranspose(world);
 	Effects::BasicFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose);
 	Effects::BasicFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mSkullMat);
-	md3dImmediateContext->DrawIndexed(mSphereIndexCount, mSphereIndexOffset, mSphereVertexOffset);
+	md3dImmediateContext->DrawIndexed(mSkullIndexCount, 0, 0);
 
 	HR(mSwapChain->Present(0, 0));
 }
@@ -467,4 +482,70 @@ void ShapesApp::BuildShapeGeometryBuffers()
 	D3D11_SUBRESOURCE_DATA iinitData;
 	iinitData.pSysMem = &indices[0];
 	HR(md3dDevice->CreateBuffer(&ibd, &iinitData, &mShapesIB));
+}
+
+void ShapesApp::BuildSkullGeometryBuffers()
+{
+	std::ifstream fin("Models/skull.txt");
+
+	if (!fin)
+	{
+		MessageBox(nullptr, L"Models/skull.txt not found.", nullptr, 0);
+		return;
+	}
+
+	UINT vcount = 0;
+	UINT tcount = 0;
+	std::string ignore;
+
+	fin >> ignore >> vcount;
+	fin >> ignore >> tcount;
+	fin >> ignore >> ignore >> ignore >> ignore;
+
+	std::vector<Vertex::PosNormal> vertices(vcount);
+	for (UINT i = 0; i < vcount; i++)
+	{
+		fin >> vertices[i].Pos.x >> vertices[i].Pos.y >> vertices[i].Pos.z;
+		fin >> vertices[i].Normal.x >> vertices[i].Normal.y >> vertices[i].Normal.z;
+	}
+
+	fin >> ignore;
+	fin >> ignore;
+	fin >> ignore;
+
+	mSkullIndexCount = 3 * tcount;
+	std::vector<UINT> indices(mSkullIndexCount);
+	for (UINT i = 0; i < tcount; i++)
+	{
+		fin >> indices[i * 3 + 0] >> indices[i * 3 + 1] >> indices[i * 3 + 2];
+	}
+
+	fin.close();
+
+
+	D3D11_BUFFER_DESC vbd;
+	vbd.Usage = D3D11_USAGE_IMMUTABLE;
+	vbd.ByteWidth = sizeof(Vertex::PosNormal) * vcount;
+	vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vbd.CPUAccessFlags = 0;
+	vbd.MiscFlags = 0;
+	vbd.StructureByteStride = 0;
+	D3D11_SUBRESOURCE_DATA vinitData;
+	vinitData.pSysMem = &vertices[0];
+	HR(md3dDevice->CreateBuffer(&vbd, &vinitData, &mSkullVB));
+
+	//
+	// Pack the indices of all the meshes into one index buffer.
+	//
+
+	D3D11_BUFFER_DESC ibd;
+	ibd.Usage = D3D11_USAGE_IMMUTABLE;
+	ibd.ByteWidth = sizeof(UINT) * mSkullIndexCount;
+	ibd.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	ibd.CPUAccessFlags = 0;
+	ibd.MiscFlags = 0;
+	ibd.StructureByteStride = 0;
+	D3D11_SUBRESOURCE_DATA iinitData;
+	iinitData.pSysMem = &indices[0];
+	HR(md3dDevice->CreateBuffer(&ibd, &iinitData, &mSkullIB));
 }

@@ -41,4 +41,7 @@
     <None Include="Basic.hlsli" />
     <None Include="LightHelper.hlsli" />
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="Models\skull.txt" />
+  </ItemGroup>
 </Project>
