@@ -6,3 +6,4 @@ The book implements the examples against the older [June 2010 DirectX SDK](https
 
 * DXERR.LIB is not a part of the Windows SDK, so a streamlined version of the library [from Chuck Walbourn (MSFT)](http://blogs.msdn.com/b/chuckw/archive/2012/04/24/where-s-dxerr-lib.aspx) is included.
 * Include `D3DX11INLINE` and `ShaderHelper` from [Alex Jadczak](https://alexjadczak.wordpress.com/2014/05/18/updating-directx-11-to-windows-8-0-sdk/).
+* Use `DDSTextureLoader` from [DirectXTex texture processing library](https://github.com/Microsoft/DirectXTex) for texture loading.

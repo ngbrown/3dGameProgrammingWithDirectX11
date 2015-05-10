@@ -11,6 +11,7 @@
 
 #include <d3dApp.h>
 #include <MathHelper.h>
+#include <DDSTextureLoader.h>
 
 #include <GeometryGenerator.h>
 #include "Vertex.h"
@@ -41,9 +42,12 @@ private:
 	ID3D11Buffer* mBoxVB;
 	ID3D11Buffer* mBoxIB;
 
+	ID3D11ShaderResourceView* mDiffuseMapSRV;
+
 	DirectionalLight mDirLights[3];
 	Material mBoxMat;
 
+	XMFLOAT4X4 mTexTransform;
 	XMFLOAT4X4 mBoxWorld;
 
 	XMFLOAT4X4 mView;
@@ -69,7 +73,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 #if defined(DEBUG) | defined(_DEBUG)
 	_CrtSetDbgFlag( _CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF );
 #endif
-
 	BoxApp theApp(hInstance);
 	
 	if( !theApp.Init() )
@@ -81,11 +84,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 
 BoxApp::BoxApp(HINSTANCE hInstance)
 : D3DApp(hInstance), 
-  mBoxVB(0), 
-  mBoxIB(0), 
-  mTheta(1.5f*MathHelper::Pi), 
-  mPhi(0.25f*MathHelper::Pi), 
-  mRadius(5.0f)
+  mBoxVB(nullptr),
+  mBoxIB(nullptr),
+  mDiffuseMapSRV(nullptr),
+  mEyePosW(0.0f, 0.0f, 0.0f),
+  mTheta(1.3f*MathHelper::Pi), 
+  mPhi(0.4f*MathHelper::Pi), 
+  mRadius(2.5f)
 {
 	mMainWndCaption = L"Box Demo";
 	
@@ -94,33 +99,30 @@ BoxApp::BoxApp(HINSTANCE hInstance)
 
 	XMMATRIX I = XMMatrixIdentity();
 	XMStoreFloat4x4(&mBoxWorld, I);
+	XMStoreFloat4x4(&mTexTransform, I);
 	XMStoreFloat4x4(&mView, I);
 	XMStoreFloat4x4(&mProj, I);
 
-	mDirLights[0].Ambient = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
-	mDirLights[0].Diffuse = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
-	mDirLights[0].Specular = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
-	mDirLights[0].Direction = XMFLOAT3(0.57735f, -0.57735f, 0.57735f);
+	mDirLights[0].Ambient  = XMFLOAT4(0.3f, 0.3f, 0.3f, 1.0f);
+	mDirLights[0].Diffuse  = XMFLOAT4(0.8f, 0.8f, 0.8f, 1.0f);
+	mDirLights[0].Specular = XMFLOAT4(0.6f, 0.6f, 0.6f, 16.0f);
+	mDirLights[0].Direction = XMFLOAT3(0.707f, -0.707f, 0.0f);
+ 
+	mDirLights[1].Ambient  = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+	mDirLights[1].Diffuse  = XMFLOAT4(1.4f, 1.4f, 1.4f, 1.0f);
+	mDirLights[1].Specular = XMFLOAT4(0.3f, 0.3f, 0.3f, 16.0f);
+	mDirLights[1].Direction = XMFLOAT3(-0.707f, 0.0f, 0.707f);
 
-	mDirLights[1].Ambient = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-	mDirLights[1].Diffuse = XMFLOAT4(0.20f, 0.20f, 0.20f, 1.0f);
-	mDirLights[1].Specular = XMFLOAT4(0.25f, 0.25f, 0.25f, 1.0f);
-	mDirLights[1].Direction = XMFLOAT3(-0.57735f, -0.57735f, 0.57735f);
-
-	mDirLights[2].Ambient = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-	mDirLights[2].Diffuse = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
-	mDirLights[2].Specular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-	mDirLights[2].Direction = XMFLOAT3(0.0f, -0.707f, -0.707f);
-
-	mBoxMat.Ambient = XMFLOAT4(0.651f, 0.5f, 0.392f, 1.0f);
-	mBoxMat.Diffuse = XMFLOAT4(0.651f, 0.5f, 0.392f, 1.0f);
-	mBoxMat.Specular = XMFLOAT4(0.2f, 0.2f, 0.2f, 16.0f);
+	mBoxMat.Ambient  = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+	mBoxMat.Diffuse  = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	mBoxMat.Specular = XMFLOAT4(0.6f, 0.6f, 0.6f, 16.0f);
 }
 
 BoxApp::~BoxApp()
 {
 	ReleaseCOM(mBoxVB);
 	ReleaseCOM(mBoxIB);
+	ReleaseCOM(mDiffuseMapSRV);
 
 	Effects::DestroyAll();
 	InputLayouts::DestroyAll();
@@ -128,12 +130,20 @@ BoxApp::~BoxApp()
 
 bool BoxApp::Init()
 {
-	if(!D3DApp::Init())
+	if (!D3DApp::Init())
 		return false;
 
 	// Must init Effects first since InputLayouts depend on shader signatures.
 	Effects::InitAll(md3dDevice);
 	InputLayouts::InitAll(md3dDevice);
+
+	// Set a default sampler
+	Effects::TexturedFX->SetSampler(md3dImmediateContext);
+	
+	// Use DirectXTex instead of D3DX11CreateShaderResourceViewFromFile
+	ID3D11Resource* tex = nullptr;
+	CreateDDSTextureFromFile(md3dDevice, L"Textures/WoodCrate01.dds", &tex, &mDiffuseMapSRV);
+	ReleaseCOM(tex);
 
 	BuildGeometryBuffers();
 
@@ -172,13 +182,13 @@ void BoxApp::DrawScene()
 	md3dImmediateContext->ClearRenderTargetView(mRenderTargetView, reinterpret_cast<const float*>(&Colors::LightSteelBlue));
 	md3dImmediateContext->ClearDepthStencilView(mDepthStencilView, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
 
-	md3dImmediateContext->IASetInputLayout(InputLayouts::PosNormal);
+	md3dImmediateContext->IASetInputLayout(InputLayouts::Basic32);
     md3dImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	// Set vertex and pixel shaders
-	Effects::BasicFX->SetAsEffect(md3dImmediateContext);
+	Effects::TexturedFX->SetAsEffect(md3dImmediateContext);
 
-	UINT stride = sizeof(Vertex::PosNormal);
+	UINT stride = sizeof(Vertex::Basic32);
     UINT offset = 0;
     md3dImmediateContext->IASetVertexBuffers(0, 1, &mBoxVB, &stride, &offset);
 	md3dImmediateContext->IASetIndexBuffer(mBoxIB, DXGI_FORMAT_R32_UINT, 0);
@@ -189,13 +199,13 @@ void BoxApp::DrawScene()
 	XMMATRIX viewProj = view*proj;
 
 	// Set per frame constants.
-	Effects::BasicFX->SetConstantBufferPerFramePixelShader(md3dImmediateContext, 3, mDirLights, mEyePosW);
+	Effects::TexturedFX->SetConstantBufferPerFramePixelShader(md3dImmediateContext, 0, mDirLights, mEyePosW);
 
 	// Draw the box.
 	XMMATRIX world = XMLoadFloat4x4(&mBoxWorld);
 	XMMATRIX worldInvTranspose = MathHelper::InverseTranspose(world);
-	Effects::BasicFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose);
-	Effects::BasicFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mBoxMat);
+	Effects::TexturedFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose, XMLoadFloat4x4(&mTexTransform));
+	Effects::TexturedFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mBoxMat, mDiffuseMapSRV);
 	md3dImmediateContext->DrawIndexed(mBoxIndexCount, mBoxIndexOffset, mBoxVertexOffset);
 
 	HR(mSwapChain->Present(0, 0));
@@ -231,15 +241,15 @@ void BoxApp::OnMouseMove(WPARAM btnState, int x, int y)
 	}
 	else if( (btnState & MK_RBUTTON) != 0 )
 	{
-		// Make each pixel correspond to 0.005 unit in the scene.
-		float dx = 0.005f*static_cast<float>(x - mLastMousePos.x);
-		float dy = 0.005f*static_cast<float>(y - mLastMousePos.y);
+		// Make each pixel correspond to 0.01 unit in the scene.
+		float dx = 0.01f*static_cast<float>(x - mLastMousePos.x);
+		float dy = 0.01f*static_cast<float>(y - mLastMousePos.y);
 
 		// Update the camera radius based on input.
 		mRadius += dx - dy;
 
 		// Restrict the radius.
-		mRadius = MathHelper::Clamp(mRadius, 3.0f, 15.0f);
+		mRadius = MathHelper::Clamp(mRadius, 1.0f, 15.0f);
 	}
 
 	mLastMousePos.x = x;
@@ -255,24 +265,35 @@ void BoxApp::BuildGeometryBuffers()
 
 	// Cache the vertex offsets to each object in the concatenated vertex buffer.
 	mBoxVertexOffset = 0;
+
+	// Cache the index count of each object.
 	mBoxIndexCount = box.Indices.size();
+
+	// Cache the starting index for each object in the concatenated index buffer.
 	mBoxIndexOffset = 0;
 
 	UINT totalVertexCount = box.Vertices.size();
+
 	UINT totalIndexCount = mBoxIndexCount;
 
-	std::vector<Vertex::PosNormal> vertices(totalVertexCount);
+	//
+	// Extract the vertex elements we are interested in and pack the
+	// vertices of all the meshes into one vertex buffer.
+	//
+
+	std::vector<Vertex::Basic32> vertices(totalVertexCount);
 
 	UINT k = 0;
 	for (size_t i = 0; i < box.Vertices.size(); i++, k++)
 	{
 		vertices[k].Pos = box.Vertices[i].Position;
 		vertices[k].Normal = box.Vertices[i].Normal;
+		vertices[k].Tex    = box.Vertices[i].TexC;
 	}
 
     D3D11_BUFFER_DESC vbd;
     vbd.Usage = D3D11_USAGE_IMMUTABLE;
-	vbd.ByteWidth = sizeof(Vertex::PosNormal) * totalVertexCount;
+	vbd.ByteWidth = sizeof(Vertex::Basic32) * totalVertexCount;
 	vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
     vbd.CPUAccessFlags = 0;
     vbd.MiscFlags = 0;
@@ -280,8 +301,10 @@ void BoxApp::BuildGeometryBuffers()
 	vinitData.pSysMem = &vertices[0];
 	HR(md3dDevice->CreateBuffer(&vbd, &vinitData, &mBoxVB));
 
+	//
+	// Pack the indices of all the meshes into one index buffer.
+	//
 
-	// Create the index buffer
 	std::vector<UINT> indices;
 	indices.insert(indices.end(), box.Indices.begin(), box.Indices.end());
 
@@ -295,3 +318,4 @@ void BoxApp::BuildGeometryBuffers()
 	iinitData.pSysMem = &indices[0];
 	HR(md3dDevice->CreateBuffer(&ibd, &iinitData, &mBoxIB));
 }
+

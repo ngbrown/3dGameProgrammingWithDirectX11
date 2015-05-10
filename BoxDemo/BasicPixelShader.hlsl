@@ -28,18 +28,6 @@ cbuffer cbPerObject
 	Material gMaterial;
 };
 
-// Nonnumeric values cannot be added to a cbuffer.
-Texture2D gDiffuseMap;
-
-SamplerState samAnisotropic
-{
-	Filter = ANISOTROPIC;
-	MaxAnisotropy = 4;
-
-	AddressU = WRAP;
-	AddressV = WRAP;
-};
-
 float4 main(VertexOut pin) : SV_Target
 {
 	// Interpolating normal can unnormalize it, so normalize it.
@@ -57,7 +45,6 @@ float4 main(VertexOut pin) : SV_Target
 	//
 	// Lighting.
 	//
-
 
 	// Start with a sum of zero. 
 	float4 ambient = float4(0.0f, 0.0f, 0.0f, 0.0f);

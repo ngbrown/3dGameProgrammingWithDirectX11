@@ -34,11 +34,22 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="BasicVertexShader.hlsl" />
+    <FxCompile Include="TexturedPixelShader.hlsl" />
+    <FxCompile Include="TexturedVertexShader.hlsl" />
     <FxCompile Include="BasicPixelShader.hlsl" />
+    <FxCompile Include="BasicVertexShader.hlsl" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="Basic.hlsli" />
     <None Include="LightHelper.hlsli" />
+    <None Include="Textured.hlsli" />
+    <None Include="Basic.hlsli" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="Textures\darkbrick.bmp">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="Textures\darkbrickdxt1.dds" />
+    <Image Include="Textures\WoodCrate01.dds" />
+    <Image Include="Textures\WoodCrate02.dds" />
   </ItemGroup>
 </Project>
