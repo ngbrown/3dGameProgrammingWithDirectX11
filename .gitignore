@@ -7,6 +7,9 @@
 *.userosscache
 *.sln.docstates
 
+# don't ignore c++ user file because it contains debug location
+!*.vcxproj.user
+
 # Build results
 [Dd]ebug/
 [Dd]ebugPublic/
