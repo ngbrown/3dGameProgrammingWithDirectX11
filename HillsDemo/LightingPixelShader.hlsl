@@ -23,13 +23,13 @@ float4 main(VertexOut pin) : SV_TARGET
 
 	float3 toEyeW = normalize(gEyePosW - pin.PosW);
 
-		// Start with a sum of zero. 
-		float4 ambient = float4(0.0f, 0.0f, 0.0f, 0.0f);
-		float4 diffuse = float4(0.0f, 0.0f, 0.0f, 0.0f);
-		float4 spec = float4(0.0f, 0.0f, 0.0f, 0.0f);
+	// Start with a sum of zero. 
+	float4 ambient = float4(0.0f, 0.0f, 0.0f, 0.0f);
+	float4 diffuse = float4(0.0f, 0.0f, 0.0f, 0.0f);
+	float4 spec = float4(0.0f, 0.0f, 0.0f, 0.0f);
 
-		// Sum the light contribution from each light source.
-		float4 A, D, S;
+	// Sum the light contribution from each light source.
+	float4 A, D, S;
 
 	ComputeDirectionalLight(gMaterial, gDirLight, pin.NormalW, toEyeW, A, D, S);
 	ambient += A;
@@ -48,8 +48,8 @@ float4 main(VertexOut pin) : SV_TARGET
 
 	float4 litColor = ambient + diffuse + spec;
 
-		// Common to take alpha from diffuse material.
-		litColor.a = gMaterial.Diffuse.a;
+	// Common to take alpha from diffuse material.
+	litColor.a = gMaterial.Diffuse.a;
 
 	return litColor;
 }
