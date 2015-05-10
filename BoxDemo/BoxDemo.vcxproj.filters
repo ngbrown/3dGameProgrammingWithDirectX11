@@ -15,11 +15,10 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="SimpleVertexShader.hlsl" />
-    <FxCompile Include="SimplePixelShader.hlsl" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="cbPerObject.h">
+    <ClInclude Include="Effects.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Vertex.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -27,5 +26,19 @@
     <ClCompile Include="BoxApp.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Effects.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Vertex.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="BasicVertexShader.hlsl" />
+    <FxCompile Include="BasicPixelShader.hlsl" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Basic.hlsli" />
+    <None Include="LightHelper.hlsli" />
   </ItemGroup>
 </Project>

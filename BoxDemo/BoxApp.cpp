@@ -10,20 +10,14 @@
 //***************************************************************************************
 
 #include <d3dApp.h>
-//#include <d3dx11Effect.h>
 #include <MathHelper.h>
-#include "cbPerObject.h"
-#include <ConstantBuffer.h>
-#include <ShaderHelper.h>
+
+#include <GeometryGenerator.h>
+#include "Vertex.h"
+#include "Effects.h"
 
 using namespace DirectX;
 using namespace DirectX::PackedVector;
-
-struct Vertex
-{
-	XMFLOAT3 Pos;
-	XMFLOAT4 Color;
-};
 
 class BoxApp : public D3DApp
 {
@@ -42,26 +36,24 @@ public:
 
 private:
 	void BuildGeometryBuffers();
-	void BuildFX();
-	void BuildVertexLayout();
-	void BuildRasterState();
 
 private:
-	ConstantBuffer<cbPerObject> mObjectConstantBuffer;
 	ID3D11Buffer* mBoxVB;
 	ID3D11Buffer* mBoxIB;
-	ID3DBlob* mPSBlob;
-	ID3DBlob* mVSBlob;
-	ID3D11PixelShader* mPixelShader;
-	ID3D11VertexShader* mVertexShader;
 
-	ID3D11RasterizerState* mRasterState;
+	DirectionalLight mDirLights[3];
+	Material mBoxMat;
 
-	ID3D11InputLayout* mInputLayout;
+	XMFLOAT4X4 mBoxWorld;
 
-	XMFLOAT4X4 mWorld;
 	XMFLOAT4X4 mView;
 	XMFLOAT4X4 mProj;
+
+	int mBoxVertexOffset;
+	UINT mBoxIndexOffset;
+	UINT mBoxIndexCount;
+
+	XMFLOAT3 mEyePosW;
 
 	float mTheta;
 	float mPhi;
@@ -91,7 +83,6 @@ BoxApp::BoxApp(HINSTANCE hInstance)
 : D3DApp(hInstance), 
   mBoxVB(0), 
   mBoxIB(0), 
-  mInputLayout(0), 
   mTheta(1.5f*MathHelper::Pi), 
   mPhi(0.25f*MathHelper::Pi), 
   mRadius(5.0f)
@@ -102,16 +93,37 @@ BoxApp::BoxApp(HINSTANCE hInstance)
 	mLastMousePos.y = 0;
 
 	XMMATRIX I = XMMatrixIdentity();
-	XMStoreFloat4x4(&mWorld, I);
+	XMStoreFloat4x4(&mBoxWorld, I);
 	XMStoreFloat4x4(&mView, I);
 	XMStoreFloat4x4(&mProj, I);
+
+	mDirLights[0].Ambient = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+	mDirLights[0].Diffuse = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+	mDirLights[0].Specular = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+	mDirLights[0].Direction = XMFLOAT3(0.57735f, -0.57735f, 0.57735f);
+
+	mDirLights[1].Ambient = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+	mDirLights[1].Diffuse = XMFLOAT4(0.20f, 0.20f, 0.20f, 1.0f);
+	mDirLights[1].Specular = XMFLOAT4(0.25f, 0.25f, 0.25f, 1.0f);
+	mDirLights[1].Direction = XMFLOAT3(-0.57735f, -0.57735f, 0.57735f);
+
+	mDirLights[2].Ambient = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+	mDirLights[2].Diffuse = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+	mDirLights[2].Specular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+	mDirLights[2].Direction = XMFLOAT3(0.0f, -0.707f, -0.707f);
+
+	mBoxMat.Ambient = XMFLOAT4(0.651f, 0.5f, 0.392f, 1.0f);
+	mBoxMat.Diffuse = XMFLOAT4(0.651f, 0.5f, 0.392f, 1.0f);
+	mBoxMat.Specular = XMFLOAT4(0.2f, 0.2f, 0.2f, 16.0f);
 }
 
 BoxApp::~BoxApp()
 {
 	ReleaseCOM(mBoxVB);
 	ReleaseCOM(mBoxIB);
-	ReleaseCOM(mInputLayout);
+
+	Effects::DestroyAll();
+	InputLayouts::DestroyAll();
 }
 
 bool BoxApp::Init()
@@ -119,11 +131,11 @@ bool BoxApp::Init()
 	if(!D3DApp::Init())
 		return false;
 
+	// Must init Effects first since InputLayouts depend on shader signatures.
+	Effects::InitAll(md3dDevice);
+	InputLayouts::InitAll(md3dDevice);
+
 	BuildGeometryBuffers();
-	BuildFX();
-	BuildVertexLayout();
-	BuildRasterState();
-	mObjectConstantBuffer.Initialize(md3dDevice);
 
 	return true;
 }
@@ -144,6 +156,8 @@ void BoxApp::UpdateScene(float dt)
 	float z = mRadius*sinf(mPhi)*sinf(mTheta);
 	float y = mRadius*cosf(mPhi);
 
+	mEyePosW = XMFLOAT3(x, y, z);
+
 	// Build the view matrix.
 	XMVECTOR pos    = XMVectorSet(x, y, z, 1.0f);
 	XMVECTOR target = XMVectorZero();
@@ -158,40 +172,31 @@ void BoxApp::DrawScene()
 	md3dImmediateContext->ClearRenderTargetView(mRenderTargetView, reinterpret_cast<const float*>(&Colors::LightSteelBlue));
 	md3dImmediateContext->ClearDepthStencilView(mDepthStencilView, D3D11_CLEAR_DEPTH|D3D11_CLEAR_STENCIL, 1.0f, 0);
 
-	md3dImmediateContext->IASetInputLayout(mInputLayout);
+	md3dImmediateContext->IASetInputLayout(InputLayouts::PosNormal);
     md3dImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	// Set vertex and pixel shaders
-	md3dImmediateContext->PSSetShader(mPixelShader, nullptr, 0);
-	md3dImmediateContext->VSSetShader(mVertexShader, nullptr, 0);
+	Effects::BasicFX->SetAsEffect(md3dImmediateContext);
 
-	UINT stride = sizeof(Vertex);
+	UINT stride = sizeof(Vertex::PosNormal);
     UINT offset = 0;
     md3dImmediateContext->IASetVertexBuffers(0, 1, &mBoxVB, &stride, &offset);
 	md3dImmediateContext->IASetIndexBuffer(mBoxIB, DXGI_FORMAT_R32_UINT, 0);
 
 	// Set constants
-	XMMATRIX world = XMLoadFloat4x4(&mWorld);
 	XMMATRIX view  = XMLoadFloat4x4(&mView);
 	XMMATRIX proj  = XMLoadFloat4x4(&mProj);
+	XMMATRIX viewProj = view*proj;
 
-	// transpose WVP matrix unless vertix shader is expecting row_major format
-	XMMATRIX worldViewProj = XMMatrixTranspose(world*view*proj);
+	// Set per frame constants.
+	Effects::BasicFX->SetConstantBufferPerFramePixelShader(md3dImmediateContext, 3, mDirLights, mEyePosW);
 
-	// Use a constant buffer. Effect framework deprecated
-	cbPerObject mPerObjectCB;
-	XMStoreFloat4x4(&mPerObjectCB.mWorldViewProj, worldViewProj);
-	mObjectConstantBuffer.Data = mPerObjectCB;
-	mObjectConstantBuffer.ApplyChanges(md3dImmediateContext);
-
-	auto buffer = mObjectConstantBuffer.Buffer();
-	md3dImmediateContext->VSSetConstantBuffers(0, 1, &buffer);
-
-	// Set raster state
-	md3dImmediateContext->RSSetState(mRasterState);
-
-	// 36 indices for the box.
-	md3dImmediateContext->DrawIndexed(36, 0, 0);
+	// Draw the box.
+	XMMATRIX world = XMLoadFloat4x4(&mBoxWorld);
+	XMMATRIX worldInvTranspose = MathHelper::InverseTranspose(world);
+	Effects::BasicFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose);
+	Effects::BasicFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mBoxMat);
+	md3dImmediateContext->DrawIndexed(mBoxIndexCount, mBoxIndexOffset, mBoxVertexOffset);
 
 	HR(mSwapChain->Present(0, 0));
 }
@@ -243,102 +248,50 @@ void BoxApp::OnMouseMove(WPARAM btnState, int x, int y)
 
 void BoxApp::BuildGeometryBuffers()
 {
-	// Create vertex buffer
-    Vertex vertices[] =
-    {
-		{ XMFLOAT3(-1.0f, -1.0f, -1.0f), static_cast<const XMFLOAT4>(Colors::White)   },
-		{ XMFLOAT3(-1.0f, +1.0f, -1.0f), static_cast<const XMFLOAT4>(Colors::Black)   },
-		{ XMFLOAT3(+1.0f, +1.0f, -1.0f), static_cast<const XMFLOAT4>(Colors::Red)     },
-		{ XMFLOAT3(+1.0f, -1.0f, -1.0f), static_cast<const XMFLOAT4>(Colors::Green)   },
-		{ XMFLOAT3(-1.0f, -1.0f, +1.0f), static_cast<const XMFLOAT4>(Colors::Blue)    },
-		{ XMFLOAT3(-1.0f, +1.0f, +1.0f), static_cast<const XMFLOAT4>(Colors::Yellow)  },
-		{ XMFLOAT3(+1.0f, +1.0f, +1.0f), static_cast<const XMFLOAT4>(Colors::Cyan)    },
-		{ XMFLOAT3(+1.0f, -1.0f, +1.0f), static_cast<const XMFLOAT4>(Colors::Magenta) }
-    };
+	GeometryGenerator::MeshData box;
+
+	GeometryGenerator geoGen;
+	geoGen.CreateBox(1.0f, 1.0f, 1.0f, box);
+
+	// Cache the vertex offsets to each object in the concatenated vertex buffer.
+	mBoxVertexOffset = 0;
+	mBoxIndexCount = box.Indices.size();
+	mBoxIndexOffset = 0;
+
+	UINT totalVertexCount = box.Vertices.size();
+	UINT totalIndexCount = mBoxIndexCount;
+
+	std::vector<Vertex::PosNormal> vertices(totalVertexCount);
+
+	UINT k = 0;
+	for (size_t i = 0; i < box.Vertices.size(); i++, k++)
+	{
+		vertices[k].Pos = box.Vertices[i].Position;
+		vertices[k].Normal = box.Vertices[i].Normal;
+	}
 
     D3D11_BUFFER_DESC vbd;
     vbd.Usage = D3D11_USAGE_IMMUTABLE;
-    vbd.ByteWidth = sizeof(Vertex) * 8;
-    vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vbd.ByteWidth = sizeof(Vertex::PosNormal) * totalVertexCount;
+	vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
     vbd.CPUAccessFlags = 0;
     vbd.MiscFlags = 0;
-	vbd.StructureByteStride = 0;
     D3D11_SUBRESOURCE_DATA vinitData;
-    vinitData.pSysMem = vertices;
-    HR(md3dDevice->CreateBuffer(&vbd, &vinitData, &mBoxVB));
+	vinitData.pSysMem = &vertices[0];
+	HR(md3dDevice->CreateBuffer(&vbd, &vinitData, &mBoxVB));
 
 
 	// Create the index buffer
-
-	UINT indices[] = {
-		// front face
-		0, 1, 2,
-		0, 2, 3,
-
-		// back face
-		4, 6, 5,
-		4, 7, 6,
-
-		// left face
-		4, 5, 1,
-		4, 1, 0,
-
-		// right face
-		3, 2, 6,
-		3, 6, 7,
-
-		// top face
-		1, 5, 6,
-		1, 6, 2,
-
-		// bottom face
-		4, 0, 3, 
-		4, 3, 7
-	};
+	std::vector<UINT> indices;
+	indices.insert(indices.end(), box.Indices.begin(), box.Indices.end());
 
 	D3D11_BUFFER_DESC ibd;
     ibd.Usage = D3D11_USAGE_IMMUTABLE;
-    ibd.ByteWidth = sizeof(UINT) * 36;
-    ibd.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	ibd.ByteWidth = sizeof(UINT) * totalIndexCount;
+	ibd.BindFlags = D3D11_BIND_INDEX_BUFFER;
     ibd.CPUAccessFlags = 0;
     ibd.MiscFlags = 0;
-	ibd.StructureByteStride = 0;
     D3D11_SUBRESOURCE_DATA iinitData;
-    iinitData.pSysMem = indices;
-    HR(md3dDevice->CreateBuffer(&ibd, &iinitData, &mBoxIB));
+	iinitData.pSysMem = &indices[0];
+	HR(md3dDevice->CreateBuffer(&ibd, &iinitData, &mBoxIB));
 }
- 
-void BoxApp::BuildFX()
-{
-	// Load cso files and create shaders
-	HR(ShaderHelper::LoadCompiledShader(L"SimplePixelShader.cso", &mPSBlob));
-	HR(md3dDevice->CreatePixelShader(mPSBlob->GetBufferPointer(), mPSBlob->GetBufferSize(), nullptr, &mPixelShader));
-
-	HR(ShaderHelper::LoadCompiledShader(L"SimpleVertexShader.cso", &mVSBlob));
-	HR(md3dDevice->CreateVertexShader(mVSBlob->GetBufferPointer(), mVSBlob->GetBufferSize(), nullptr, &mVertexShader));
-}
-
-void BoxApp::BuildVertexLayout()
-{
-	// Create the vertex input layout.
-	D3D11_INPUT_ELEMENT_DESC vertexDesc[] =
-	{
-		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
-		{"COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0}
-	};
-
-	// Create the input layout
-	HR(md3dDevice->CreateInputLayout(vertexDesc, 2, mVSBlob->GetBufferPointer(),
-		mVSBlob->GetBufferSize(), &mInputLayout));
-}
-
-void BoxApp::BuildRasterState()
-{
-	D3D11_RASTERIZER_DESC rs;
-	memset(&rs, 0, sizeof(rs));
-	rs.FillMode = D3D11_FILL_SOLID;
-	rs.CullMode = D3D11_CULL_BACK;
-	rs.AntialiasedLineEnable = rs.DepthClipEnable = true;
-	mRasterState = nullptr;
-	HR(md3dDevice->CreateRasterizerState(&rs, &mRasterState));
-} 
