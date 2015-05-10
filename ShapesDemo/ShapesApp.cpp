@@ -13,8 +13,6 @@
 
 #include <d3dApp.h>
 #include <MathHelper.h>
-#include <ConstantBuffer.h>
-#include <ShaderHelper.h>
 
 #include <GeometryGenerator.h>
 #include "Vertex.h"
@@ -22,8 +20,6 @@
 
 using namespace DirectX;
 using namespace DirectX::PackedVector;
-
-// Not to be confused with GeometryGenerator.Vertex
 
 class ShapesApp : public D3DApp
 {
