@@ -1,24 +1,25 @@
 //=============================================================================
-// LightingVertexShader.hlsl by Frank Luna (C) 2011 All Rights Reserved.
+// BasicVertexShader.hlsl by Frank Luna (C) 2011 All Rights Reserved.
 //
-// Transforms geometry.
+// Basic effect that currently supports transformations, lighting, and texturing.
 //=============================================================================
 
-#include "LightHelper.hlsli"
-#include "Lighting.hlsli"
-
-cbuffer cbLightingPerObject
-{
-	float4x4 gWorld;
-	float4x4 gWorldInvTranspose;
-	float4x4 gWorldViewProj;
-	Material gMaterial;
-};
+#include "Textured.hlsli"
 
 struct VertexIn
 {
 	float3 PosL    : POSITION;
 	float3 NormalL : NORMAL;
+	float2 Tex     : TEXCOORD;
+};
+
+
+cbuffer cbPerObject
+{
+	float4x4 gWorld;
+	float4x4 gWorldInvTranspose;
+	float4x4 gWorldViewProj;
+	float4x4 gTexTransform;
 };
 
 VertexOut main(VertexIn vin)
@@ -31,6 +32,9 @@ VertexOut main(VertexIn vin)
 
 	// Transform to homogeneous clip space.
 	vout.PosH = mul(float4(vin.PosL, 1.0f), gWorldViewProj);
+
+	// Output vertex attributes for interpolation across triangle.
+	vout.Tex = mul(float4(vin.Tex, 0.0f, 1.0f), gTexTransform).xy;
 
 	return vout;
 }

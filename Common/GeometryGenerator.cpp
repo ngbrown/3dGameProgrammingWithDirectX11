@@ -579,11 +579,9 @@ void GeometryGenerator::CreateGrid(float width, float depth, UINT m, UINT n, Mes
 
 			meshData.Vertices[i*n + j].Position = XMFLOAT3(x, 0.0f, z);
 
-			// Ignore for now, used for lighting.
 			meshData.Vertices[i*n + j].Normal = XMFLOAT3(0.0f, 1.0f, 0.0f);
 			meshData.Vertices[i*n + j].TangentU = XMFLOAT3(1.0f, 0.0f, 0.0f);
 
-			// Ignore for now, used for texturing.
 			meshData.Vertices[i*n + j].TexC.x = j*du;
 			meshData.Vertices[i*n + j].TexC.y = i*dv;
 		}

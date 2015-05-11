@@ -5,6 +5,7 @@
 // Demonstrates dynamic vertex buffers by performing an animated wave simulation where
 // the vertex buffers are updated every frame with the new snapshot of the wave simulation.
 // Demonstrates 3D lighting with directional, point, and spot lights.
+// Demonstrates texture tiling and texture animation.
 //
 // Controls:
 //		Hold the left mouse button down and move the mouse to rotate.
@@ -15,42 +16,16 @@
 
 #include <d3dApp.h>
 #include <MathHelper.h>
-#include <ConstantBuffer.h>
-#include <ShaderHelper.h>
+#include <DDSTextureLoader.h>
 
 #include <GeometryGenerator.h>
+#include "Vertex.h"
+#include "Effects.h"
 
 #include "Waves.h"
 
 using namespace DirectX;
 using namespace DirectX::PackedVector;
-
-// Not to be confused with GeometryGenerator.Vertex
-struct Vertex
-{
-	XMFLOAT3 Pos;
-	XMFLOAT3 Normal;
-};
-
-
-struct cbLightingPerObject
-{
-	XMFLOAT4X4 mWorld;
-	XMFLOAT4X4 mWorldInvTransform;
-	XMFLOAT4X4 mWorldViewProj;
-	Material mMaterial;
-};
-
-struct cbLightingPerFrame
-{
-	DirectionalLight mDirLight;
-	PointLight mPointLight;
-	SpotLight mSpotLight;
-	XMFLOAT3 mEyePosW;
-	float pad;
-	Material mMaterial;
-};
-
 
 class HillsApp : public D3DApp
 {
@@ -61,8 +36,6 @@ public:
 	bool Init();				// override
 	void OnResize();			// override
 	void UpdateScene(float dt);	// implement pure virtual
-	void ApplyConstantBufferPerObject(const XMMATRIX& worldViewProj, const XMMATRIX& world, const XMMATRIX& worldInvTransform);
-	void ApplyConstantBufferPerFrame(const Material& material);
 	void DrawScene(); 			// implement pure virtual
 
 	void OnMouseDown(WPARAM btnState, int x, int y);	// override
@@ -74,36 +47,26 @@ private:
 	XMFLOAT3 GetHillNormal(float x, float z) const;
 	void BuildGeometryBuffers();
 	void BuildLandGeometryBuffers();
-	void BuildWavesGeometryBuffers();
-	void BuildFX();
-	void BuildVertexLayout();
-	void BuildRasterState();
+	void BuildWaveGeometryBuffers();
 
 private:
-	ConstantBuffer<cbLightingPerObject> mConstantBufferPerObject;
-	ConstantBuffer<cbLightingPerFrame> mConstantBufferPerFrame;
 	ID3D11Buffer* mLandVB;
 	ID3D11Buffer* mLandIB;
+
 	ID3D11Buffer* mWavesVB;
 	ID3D11Buffer* mWavesIB;
 
-	ID3D11RasterizerState* mRasterState;
-	ID3D11RasterizerState* mWireframeRS;
+	ID3D11ShaderResourceView* mGrassMapSRV;
+	ID3D11ShaderResourceView* mWavesMapSRV;
 
 	Waves mWaves;
-	DirectionalLight mDirLight;
-	PointLight mPointLight;
-	SpotLight mSpotLight;
+
+	DirectionalLight mDirLights[3];
 	Material mLandMat;
 	Material mWavesMat;
 
-	ID3DBlob* mPSBlob;
-	ID3DBlob* mVSBlob;
-	ID3D11PixelShader* mPixelShader;
-	ID3D11VertexShader* mVertexShader;
-
-
-	ID3D11InputLayout* mInputLayout;
+	XMFLOAT4X4 mGrassTexTransform;
+	XMFLOAT4X4 mWaterTexTransform;
 
 	// Define transformations from local spaces to world space.
 	XMFLOAT4X4 mLandWorld;
@@ -113,6 +76,7 @@ private:
 	XMFLOAT4X4 mProj;
 
 	UINT mLandIndexCount;
+	XMFLOAT2 mWaterTexOffset;
 
 	XMFLOAT3 mEyePosW;
 
@@ -146,13 +110,13 @@ HillsApp::HillsApp(HINSTANCE hInstance)
 	mLandIB(nullptr),
 	mWavesVB(nullptr),
 	mWavesIB(nullptr),
-	mRasterState(nullptr),
-	mWireframeRS(nullptr),
-	mInputLayout(nullptr),
+	mGrassMapSRV(nullptr),
+	mWavesMapSRV(nullptr),
 	mLandIndexCount(0),
+	mWaterTexOffset(0.0f, 0.0f),
 	mEyePosW(0.0f, 0.0f, 0.0f),
-	mTheta(1.5f*MathHelper::Pi),
-	mPhi(0.1f*MathHelper::Pi),
+	mTheta(1.3f*MathHelper::Pi),
+	mPhi(0.4f*MathHelper::Pi),
 	mRadius(80.0f)
 {
 	mMainWndCaption = L"Hills Demo";
@@ -166,37 +130,31 @@ HillsApp::HillsApp(HINSTANCE hInstance)
 	XMStoreFloat4x4(&mView, I);
 	XMStoreFloat4x4(&mProj, I);
 
-	XMMATRIX wavesOffset = XMMatrixTranslation(0.0f, -3.0f, 0.0f);
-	XMStoreFloat4x4(&mWavesWorld, wavesOffset);
+	XMMATRIX grassTexScale = XMMatrixScaling(5.0f, 5.0f, 0.0f);
+	XMStoreFloat4x4(&mGrassTexTransform, grassTexScale);
 
-	// Directional light.
-	mDirLight.Ambient = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
-	mDirLight.Diffuse = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
-	mDirLight.Specular = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
-	mDirLight.Direction = XMFLOAT3(0.57735f, -0.57735f, 0.57735f);
+	mDirLights[0].Ambient = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+	mDirLights[0].Diffuse = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+	mDirLights[0].Specular = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+	mDirLights[0].Direction = XMFLOAT3(0.57735f, -0.57735f, 0.57735f);
 
-	// Point light--position is changed every frame to animate in UpdateScene function.
-	mPointLight.Ambient = XMFLOAT4(0.3f, 0.3f, 0.3f, 1.0f);
-	mPointLight.Diffuse = XMFLOAT4(0.7f, 0.7f, 0.7f, 1.0f);
-	mPointLight.Specular = XMFLOAT4(0.7f, 0.7f, 0.7f, 1.0f);
-	mPointLight.Att = XMFLOAT3(0.0f, 0.1f, 0.0f);
-	mPointLight.Range = 25.0f;
+	mDirLights[1].Ambient  = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+	mDirLights[1].Diffuse  = XMFLOAT4(0.20f, 0.20f, 0.20f, 1.0f);
+	mDirLights[1].Specular = XMFLOAT4(0.25f, 0.25f, 0.25f, 1.0f);
+	mDirLights[1].Direction = XMFLOAT3(-0.57735f, -0.57735f, 0.57735f);
 
-	// Spot light--position and direction changed every frame to animate in UpdateScene function
-	mSpotLight.Ambient = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
-	mSpotLight.Diffuse = XMFLOAT4(1.0f, 1.0f, 0.0f, 1.0f);
-	mSpotLight.Specular = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-	mSpotLight.Att = XMFLOAT3(1.0f, 0.0f, 0.0f);
-	mSpotLight.Spot = 96.0f;
-	mSpotLight.Range = 10000.0f;
+	mDirLights[2].Ambient  = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+	mDirLights[2].Diffuse  = XMFLOAT4(0.2f, 0.2f, 0.2f, 1.0f);
+	mDirLights[2].Specular = XMFLOAT4(0.0f, 0.0f, 0.0f, 1.0f);
+	mDirLights[2].Direction = XMFLOAT3(0.0f, -0.707f, -0.707f);
 
-	mLandMat.Ambient = XMFLOAT4(0.48f, 0.77f, 0.46f, 1.0f);
-	mLandMat.Diffuse = XMFLOAT4(0.48f, 0.77f, 0.46f, 1.0f);
+	mLandMat.Ambient  = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+	mLandMat.Diffuse  = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	mLandMat.Specular = XMFLOAT4(0.2f, 0.2f, 0.2f, 16.0f);
 
-	mWavesMat.Ambient = XMFLOAT4(0.137f, 0.42f, 0.556f, 1.0f);
-	mWavesMat.Diffuse = XMFLOAT4(0.137f, 0.42f, 0.556f, 1.0f);
-	mWavesMat.Specular = XMFLOAT4(0.8f, 0.8f, 0.8f, 96.0f);
+	mWavesMat.Ambient  = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+	mWavesMat.Diffuse  = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	mWavesMat.Specular = XMFLOAT4(0.8f, 0.8f, 0.8f, 32.0f);
 }
 
 HillsApp::~HillsApp()
@@ -205,8 +163,11 @@ HillsApp::~HillsApp()
 	ReleaseCOM(mLandIB);
 	ReleaseCOM(mWavesVB);
 	ReleaseCOM(mWavesIB);
-	ReleaseCOM(mInputLayout);
-	ReleaseCOM(mWireframeRS);
+	ReleaseCOM(mGrassMapSRV);
+	ReleaseCOM(mWavesMapSRV);
+
+	Effects::DestroyAll();
+	InputLayouts::DestroyAll();
 }
 
 bool HillsApp::Init()
@@ -216,12 +177,22 @@ bool HillsApp::Init()
 
 	mWaves.Init(160, 160, 1.0f, 0.03f, 3.25f, 0.4f);
 
+	// Must init Effects first since InputLayouts depend on shader signatures.
+	Effects::InitAll(md3dDevice);
+	InputLayouts::InitAll(md3dDevice);
+
+	// Set a default sampler
+	Effects::TexturedFX->SetSampler(md3dImmediateContext);
+
+	// Use DirectXTex instead of D3DX11CreateShaderResourceViewFromFile
+	ID3D11Resource* tex = nullptr;
+	HR(CreateDDSTextureFromFile(md3dDevice, L"Textures/grass.dds", &tex, &mGrassMapSRV));
+	ReleaseCOM(tex);
+
+	HR(CreateDDSTextureFromFile(md3dDevice, L"Textures/water2.dds", &tex, &mWavesMapSRV));
+	ReleaseCOM(tex);
+
 	BuildGeometryBuffers();
-	BuildFX();
-	BuildVertexLayout();
-	BuildRasterState();
-	mConstantBufferPerObject.Initialize(md3dDevice);
-	mConstantBufferPerFrame.Initialize(md3dDevice);
 
 	return true;
 }
@@ -277,58 +248,33 @@ void HillsApp::UpdateScene(float dt)
 	D3D11_MAPPED_SUBRESOURCE mappedData;
 	HR(md3dImmediateContext->Map(mWavesVB, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedData));
 
-	Vertex* v = reinterpret_cast<Vertex*>(mappedData.pData);
+	Vertex::Basic32* v = reinterpret_cast<Vertex::Basic32*>(mappedData.pData);
 	for (UINT i = 0; i < mWaves.VertexCount(); i++)
 	{
 		v[i].Pos = mWaves[i];
 		v[i].Normal = mWaves.Normal(i);
+
+		// Derive tex-coords in [0,1] from position.
+		v[i].Tex.x  = 0.5f + mWaves[i].x / mWaves.Width();
+		v[i].Tex.y  = 0.5f - mWaves[i].z / mWaves.Depth();
 	}
 
 	md3dImmediateContext->Unmap(mWavesVB, 0);
 
 	//
-	// Animate the lights
+	// Animate water texture coordinates.
 	//
 
-	// Circle light over the land surface.
-	mPointLight.Position.x = 70.0f*cosf(0.2f*mTimer.TotalTime());
-	mPointLight.Position.z = 70.0f*sinf(0.2f*mTimer.TotalTime());
-	mPointLight.Position.y = MathHelper::Max(GetHillHeight(mPointLight.Position.x, mPointLight.Position.z), -3.0f) + 10.0f;
+	// Tile water texture.
+	XMMATRIX wavesScale = XMMatrixScaling(5.0f, 5.0f, 0.0f);
 
-	// The spotlight takes on the camera position and is aimed in the
-	// same direction the camera is looking.  In this way, it looks
-	// like we are holding a flashlight.
-	mSpotLight.Position = mEyePosW;
-	XMStoreFloat3(&mSpotLight.Direction, XMVector3Normalize(target - pos));
-}
+	// Translate texture over time.
+	mWaterTexOffset.y += 0.01f*dt;
+	mWaterTexOffset.x += 0.02f*dt;	
+	XMMATRIX wavesOffset = XMMatrixTranslation(mWaterTexOffset.x, mWaterTexOffset.y, 0.0f);
 
-void HillsApp::ApplyConstantBufferPerObject(const XMMATRIX& worldViewProj, const XMMATRIX& world, const XMMATRIX& worldInvTransform)
-{
-	// Use a constant buffer. Effect framework deprecated
-	cbLightingPerObject perObjectCB;
-	XMStoreFloat4x4(&perObjectCB.mWorldViewProj, XMMatrixTranspose(worldViewProj));
-	XMStoreFloat4x4(&perObjectCB.mWorld, world);
-	XMStoreFloat4x4(&perObjectCB.mWorldInvTransform, worldInvTransform);
-
-	mConstantBufferPerObject.Data = perObjectCB;
-	mConstantBufferPerObject.ApplyChanges(md3dImmediateContext);
-	ID3D11Buffer* buffer = mConstantBufferPerObject.Buffer();
-	md3dImmediateContext->VSSetConstantBuffers(0, 1, &buffer);
-}
-
-void HillsApp::ApplyConstantBufferPerFrame(const Material& material)
-{
-	cbLightingPerFrame perFrameCB;
-	perFrameCB.mDirLight = mDirLight;
-	perFrameCB.mPointLight = mPointLight;
-	perFrameCB.mSpotLight = mSpotLight;
-	perFrameCB.mEyePosW = mEyePosW;
-	perFrameCB.mMaterial = material;
-
-	mConstantBufferPerFrame.Data = perFrameCB;
-	mConstantBufferPerFrame.ApplyChanges(md3dImmediateContext);
-	ID3D11Buffer* buffer = mConstantBufferPerFrame.Buffer();
-	md3dImmediateContext->PSSetConstantBuffers(0, 1, &buffer);
+	// Combine scale and translation.
+	XMStoreFloat4x4(&mWaterTexTransform, wavesScale*wavesOffset);
 }
 
 void HillsApp::DrawScene()
@@ -336,14 +282,13 @@ void HillsApp::DrawScene()
 	md3dImmediateContext->ClearRenderTargetView(mRenderTargetView, reinterpret_cast<const float*>(&Colors::LightSteelBlue));
 	md3dImmediateContext->ClearDepthStencilView(mDepthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
-	md3dImmediateContext->IASetInputLayout(mInputLayout);
+	md3dImmediateContext->IASetInputLayout(InputLayouts::Basic32);
 	md3dImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	// Set vertex and pixel shaders
-	md3dImmediateContext->PSSetShader(mPixelShader, nullptr, 0);
-	md3dImmediateContext->VSSetShader(mVertexShader, nullptr, 0);
+	Effects::TexturedFX->SetAsEffect(md3dImmediateContext);
 
-	UINT stride = sizeof(Vertex);
+	UINT stride = sizeof(Vertex::Basic32);
 	UINT offset = 0;
 
 	// Set constants
@@ -351,18 +296,19 @@ void HillsApp::DrawScene()
 	XMMATRIX proj = XMLoadFloat4x4(&mProj);
 	XMMATRIX viewProj = view*proj;
 
+	// Set per frame constants.
+	Effects::TexturedFX->SetConstantBufferPerFramePixelShader(md3dImmediateContext, 3, mDirLights, mEyePosW);
+
 	//
-	// Draw the Land
+	// Draw the hills
 	//
 	md3dImmediateContext->IASetVertexBuffers(0, 1, &mLandVB, &stride, &offset);
 	md3dImmediateContext->IASetIndexBuffer(mLandIB, DXGI_FORMAT_R32_UINT, 0);
 
 	XMMATRIX world = XMLoadFloat4x4(&mLandWorld);
 	XMMATRIX worldInvTranspose = MathHelper::InverseTranspose(world);
-	XMMATRIX worldViewProj = world*view*proj;
-
-	ApplyConstantBufferPerObject(worldViewProj, world, worldInvTranspose);
-	ApplyConstantBufferPerFrame(mLandMat);
+	Effects::TexturedFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose, XMLoadFloat4x4(&mGrassTexTransform));
+	Effects::TexturedFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mLandMat, mGrassMapSRV);
 	md3dImmediateContext->DrawIndexed(mLandIndexCount, 0, 0);
 
 	//
@@ -374,14 +320,10 @@ void HillsApp::DrawScene()
 
 	world = XMLoadFloat4x4(&mWavesWorld);
 	worldInvTranspose = MathHelper::InverseTranspose(world);
-	worldViewProj = world*view*proj;
 
-	ApplyConstantBufferPerObject(worldViewProj, world, worldInvTranspose);
-	ApplyConstantBufferPerFrame(mWavesMat);
+	Effects::TexturedFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose, XMLoadFloat4x4(&mWaterTexTransform));
+	Effects::TexturedFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mWavesMat, mWavesMapSRV);
 	md3dImmediateContext->DrawIndexed(3 * mWaves.TriangleCount(), 0, 0);
-
-	// Restore default.
-//	md3dImmediateContext->RSSetState(nullptr);
 
 	HR(mSwapChain->Present(0, 0));
 }
@@ -416,9 +358,9 @@ void HillsApp::OnMouseMove(WPARAM btnState, int x, int y)
 	}
 	else if ((btnState & MK_RBUTTON) != 0)
 	{
-		// Make each pixel correspond to 0.2 unit in the scene.
-		float dx = 0.2f*static_cast<float>(x - mLastMousePos.x);
-		float dy = 0.2f*static_cast<float>(y - mLastMousePos.y);
+		// Make each pixel correspond to 0.01 unit in the scene.
+		float dx = 0.05f*static_cast<float>(x - mLastMousePos.x);
+		float dy = 0.05f*static_cast<float>(y - mLastMousePos.y);
 
 		// Update the camera radius based on input.
 		mRadius += dx - dy;
@@ -434,7 +376,7 @@ void HillsApp::OnMouseMove(WPARAM btnState, int x, int y)
 void HillsApp::BuildGeometryBuffers()
 {
 	BuildLandGeometryBuffers();
-	BuildWavesGeometryBuffers();
+	BuildWaveGeometryBuffers();
 }
 
 float HillsApp::GetHillHeight(float x, float z) const
@@ -470,7 +412,7 @@ void HillsApp::BuildLandGeometryBuffers()
 	// each vertex.  
 	//
 
-	std::vector<Vertex> vertices(grid.Vertices.size());
+	std::vector<Vertex::Basic32> vertices(grid.Vertices.size());
 	for (size_t i = 0; i < grid.Vertices.size(); i++)
 	{
 		XMFLOAT3 p = grid.Vertices[i].Position;
@@ -478,11 +420,12 @@ void HillsApp::BuildLandGeometryBuffers()
 
 		vertices[i].Pos = p;
 		vertices[i].Normal = GetHillNormal(p.x, p.z);
+		vertices[i].Tex    = grid.Vertices[i].TexC;
 	}
 
 	D3D11_BUFFER_DESC vbd;
 	vbd.Usage = D3D11_USAGE_IMMUTABLE;
-	vbd.ByteWidth = sizeof(Vertex) * grid.Vertices.size();
+	vbd.ByteWidth = sizeof(Vertex::Basic32) * grid.Vertices.size();
 	vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	vbd.CPUAccessFlags = 0;
 	vbd.MiscFlags = 0;
@@ -507,14 +450,14 @@ void HillsApp::BuildLandGeometryBuffers()
 	HR(md3dDevice->CreateBuffer(&ibd, &iinitData, &mLandIB));
 }
 
-void HillsApp::BuildWavesGeometryBuffers()
+void HillsApp::BuildWaveGeometryBuffers()
 {
 	// Create the vertex buffer.  Note that we allocate space only, as
 	// we will be updating the data every time step of the simulation.
 
 	D3D11_BUFFER_DESC vbd;
 	vbd.Usage = D3D11_USAGE_DYNAMIC;
-	vbd.ByteWidth = sizeof(Vertex) * mWaves.VertexCount();
+	vbd.ByteWidth = sizeof(Vertex::Basic32) * mWaves.VertexCount();
 	vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	vbd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 	vbd.MiscFlags = 0;
@@ -554,48 +497,4 @@ void HillsApp::BuildWavesGeometryBuffers()
 	D3D11_SUBRESOURCE_DATA iinitData;
 	iinitData.pSysMem = &indices[0];
 	HR(md3dDevice->CreateBuffer(&ibd, &iinitData, &mWavesIB));
-}
-
-void HillsApp::BuildFX()
-{
-	// Load cso files and create shaders
-	HR(ShaderHelper::LoadCompiledShader(L"LightingPixelShader.cso", &mPSBlob));
-	HR(md3dDevice->CreatePixelShader(mPSBlob->GetBufferPointer(), mPSBlob->GetBufferSize(), nullptr, &mPixelShader));
-
-	HR(ShaderHelper::LoadCompiledShader(L"LightingVertexShader.cso", &mVSBlob));
-	HR(md3dDevice->CreateVertexShader(mVSBlob->GetBufferPointer(), mVSBlob->GetBufferSize(), nullptr, &mVertexShader));
-}
-
-void HillsApp::BuildVertexLayout()
-{
-	// Create the vertex input layout.
-	D3D11_INPUT_ELEMENT_DESC vertexDesc[] =
-	{
-		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D11_INPUT_PER_VERTEX_DATA, 0 }
-	};
-
-	// Create the input layout
-	HR(md3dDevice->CreateInputLayout(vertexDesc, 2, mVSBlob->GetBufferPointer(),
-		mVSBlob->GetBufferSize(), &mInputLayout));
-}
-
-void HillsApp::BuildRasterState()
-{
-	D3D11_RASTERIZER_DESC rs;
-	memset(&rs, 0, sizeof(rs));
-	rs.FillMode = D3D11_FILL_SOLID;
-	rs.CullMode = D3D11_CULL_BACK;
-	rs.AntialiasedLineEnable = rs.DepthClipEnable = true;
-	mRasterState = nullptr;
-	HR(md3dDevice->CreateRasterizerState(&rs, &mRasterState));
-
-	D3D11_RASTERIZER_DESC wireframeDesc;
-	ZeroMemory(&wireframeDesc, sizeof(D3D11_RASTERIZER_DESC));
-	wireframeDesc.FillMode = D3D11_FILL_WIREFRAME;
-	wireframeDesc.CullMode = D3D11_CULL_BACK;
-	//wireframeDesc.CullMode = D3D11_CULL_NONE;
-	wireframeDesc.FrontCounterClockwise = false;
-	wireframeDesc.DepthClipEnable = true;
-	HR(md3dDevice->CreateRasterizerState(&wireframeDesc, &mWireframeRS));
 }

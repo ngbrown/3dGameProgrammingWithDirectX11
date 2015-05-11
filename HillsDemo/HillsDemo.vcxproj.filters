@@ -13,13 +13,23 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-  </ItemGroup>
-  <ItemGroup>
-    <FxCompile Include="LightingPixelShader.hlsl" />
-    <FxCompile Include="LightingVertexShader.hlsl" />
+    <Filter Include="Textures">
+      <UniqueIdentifier>{6f305759-8488-44ba-9d4e-cd6bf797fc92}</UniqueIdentifier>
+      <Extensions>dds;bmp</Extensions>
+    </Filter>
+    <Filter Include="Shaders">
+      <UniqueIdentifier>{83f344c3-00d4-48ca-acd6-73f08e17c852}</UniqueIdentifier>
+      <Extensions>hlsl;hlsli</Extensions>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Waves.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Effects.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Vertex.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -30,9 +40,53 @@
     <ClCompile Include="Waves.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Effects.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Vertex.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="LightHelper.hlsli" />
-    <None Include="Lighting.hlsli" />
+    <None Include="LightHelper.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Basic.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Textured.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="Textures\grass.dds">
+      <Filter>Textures</Filter>
+    </Image>
+    <Image Include="Textures\water1.dds">
+      <Filter>Textures</Filter>
+    </Image>
+    <Image Include="Textures\water2.dds">
+      <Filter>Textures</Filter>
+    </Image>
+    <Image Include="Textures\WoodCrate01.dds">
+      <Filter>Textures</Filter>
+    </Image>
+    <Image Include="Textures\WoodCrate02.dds">
+      <Filter>Textures</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="BasicPixelShader.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="BasicVertexShader.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="TexturedPixelShader.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="TexturedVertexShader.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>
