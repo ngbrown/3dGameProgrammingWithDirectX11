@@ -13,6 +13,7 @@
 
 #include <d3dApp.h>
 #include <MathHelper.h>
+#include <DDSTextureLoader.h>
 
 #include <GeometryGenerator.h>
 #include "Vertex.h"
@@ -47,12 +48,21 @@ private:
 	ID3D11Buffer* mSkullVB;
 	ID3D11Buffer* mSkullIB;
 
+	ID3D11ShaderResourceView* mBricksMapSRV;
+	ID3D11ShaderResourceView* mFloorMapSRV;
+	ID3D11ShaderResourceView* mStoneMapSRV;
+
 	DirectionalLight mDirLights[3];
 	Material mGridMat;
 	Material mBoxMat;
 	Material mCylinderMat;
 	Material mSphereMat;
 	Material mSkullMat;
+
+	XMFLOAT4X4 mGridTexTransform;
+	XMFLOAT4X4 mBoxTexTransform;
+	XMFLOAT4X4 mCylinderTexTransform;
+	XMFLOAT4X4 mSphereTexTransform;
 
 	// Define transformations from local spaces to world space.
 	XMFLOAT4X4 mSphereWorld[10];
@@ -115,6 +125,9 @@ ShapesApp::ShapesApp(HINSTANCE hInstance)
 	mShapesIB(nullptr),
 	mSkullVB(nullptr),
 	mSkullIB(nullptr),
+	mBricksMapSRV(nullptr),
+	mFloorMapSRV(nullptr),
+	mStoneMapSRV(nullptr),
 	mSkullIndexCount(0),
 	mLightCount(1),
 	mEyePosW(0.0f, 0.0f, 0.0f),
@@ -131,6 +144,16 @@ ShapesApp::ShapesApp(HINSTANCE hInstance)
 	XMStoreFloat4x4(&mGridWorld, I);
 	XMStoreFloat4x4(&mView, I);
 	XMStoreFloat4x4(&mProj, I);
+
+	XMMATRIX texScale = XMMatrixScaling(20.0f/5, 30.0f/5, 0.0f);
+	XMStoreFloat4x4(&mGridTexTransform, texScale);
+
+	texScale = XMMatrixScaling(3.0f, 1.0f, 0.0f);
+	XMStoreFloat4x4(&mBoxTexTransform, texScale);
+
+	texScale = XMMatrixScaling(1.0f, 1.0f, 0.0f);
+	XMStoreFloat4x4(&mCylinderTexTransform, texScale);
+	XMStoreFloat4x4(&mSphereTexTransform, texScale);
 
 	XMMATRIX boxScale = XMMatrixScaling(3.0f, 1.0f, 3.0f);
 	XMMATRIX boxOffset = XMMatrixTranslation(0.0f, 0.5f, 0.0f);
@@ -191,6 +214,9 @@ ShapesApp::~ShapesApp()
 	ReleaseCOM(mShapesIB);
 	ReleaseCOM(mSkullVB);
 	ReleaseCOM(mSkullIB);
+	ReleaseCOM(mBricksMapSRV);
+	ReleaseCOM(mFloorMapSRV);
+	ReleaseCOM(mStoneMapSRV);
 
 	Effects::DestroyAll();
 	InputLayouts::DestroyAll();
@@ -204,6 +230,19 @@ bool ShapesApp::Init()
 	// Must init Effects first since InputLayouts depend on shader signatures.
 	Effects::InitAll(md3dDevice);
 	InputLayouts::InitAll(md3dDevice);
+
+	Effects::TexturedFX->SetSampler(md3dImmediateContext);
+
+	// Use DirectXTex instead of D3DX11CreateShaderResourceViewFromFile
+	ID3D11Resource* tex = nullptr;
+	HR(CreateDDSTextureFromFile(md3dDevice, L"Textures/bricks.dds", &tex, &mBricksMapSRV));
+	ReleaseCOM(tex);
+
+	HR(CreateDDSTextureFromFile(md3dDevice, L"Textures/floor.dds", &tex, &mFloorMapSRV));
+	ReleaseCOM(tex);
+
+	HR(CreateDDSTextureFromFile(md3dDevice, L"Textures/stone.dds", &tex, &mStoneMapSRV));
+	ReleaseCOM(tex);
 
 	BuildShapeGeometryBuffers();
 	BuildSkullGeometryBuffers();
@@ -258,15 +297,10 @@ void ShapesApp::DrawScene()
 	md3dImmediateContext->ClearRenderTargetView(mRenderTargetView, reinterpret_cast<const float*>(&Colors::LightSteelBlue));
 	md3dImmediateContext->ClearDepthStencilView(mDepthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
-	md3dImmediateContext->IASetInputLayout(InputLayouts::PosNormal);
+	md3dImmediateContext->IASetInputLayout(InputLayouts::Basic32);
 	md3dImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-	//md3dImmediateContext->RSSetState(mWireframeRS);
-
-	// Set vertex and pixel shaders
-	Effects::BasicFX->SetAsEffect(md3dImmediateContext);
-
-	UINT stride = sizeof(Vertex::PosNormal);
+	UINT stride = sizeof(Vertex::Basic32);
 	UINT offset = 0;
 	md3dImmediateContext->IASetVertexBuffers(0, 1, &mShapesVB, &stride, &offset);
 	md3dImmediateContext->IASetIndexBuffer(mShapesIB, DXGI_FORMAT_R32_UINT, 0);
@@ -276,21 +310,24 @@ void ShapesApp::DrawScene()
 	XMMATRIX proj = XMLoadFloat4x4(&mProj);
 	XMMATRIX viewProj = view*proj;
 
+	// Set vertex and pixel shaders
+	Effects::TexturedFX->SetAsEffect(md3dImmediateContext);
+
 	// Set per frame constants.
-	Effects::BasicFX->SetConstantBufferPerFramePixelShader(md3dImmediateContext, mLightCount, mDirLights, mEyePosW);
+	Effects::TexturedFX->SetConstantBufferPerFramePixelShader(md3dImmediateContext, mLightCount, mDirLights, mEyePosW);
 
 	// Draw the grid.
 	XMMATRIX world = XMLoadFloat4x4(&mGridWorld);
 	XMMATRIX worldInvTranspose = MathHelper::InverseTranspose(world);
-	Effects::BasicFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose);
-	Effects::BasicFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mGridMat);
+	Effects::TexturedFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose, XMLoadFloat4x4(&mGridTexTransform));
+	Effects::TexturedFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mGridMat, mFloorMapSRV);
 	md3dImmediateContext->DrawIndexed(mGridIndexCount, mGridIndexOffset, mGridVertexOffset);
 
 	// Draw the box.
 	world = XMLoadFloat4x4(&mBoxWorld);
 	worldInvTranspose = MathHelper::InverseTranspose(world);
-	Effects::BasicFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose);
-	Effects::BasicFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mBoxMat);
+	Effects::TexturedFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose, XMLoadFloat4x4(&mBoxTexTransform));
+	Effects::TexturedFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mBoxMat, mStoneMapSRV);
 	md3dImmediateContext->DrawIndexed(mBoxIndexCount, mBoxIndexOffset, mBoxVertexOffset);
 
 	// Draw the cylinders.
@@ -298,8 +335,8 @@ void ShapesApp::DrawScene()
 	{
 		world = XMLoadFloat4x4(&mCylWorld[i]);
 		worldInvTranspose = MathHelper::InverseTranspose(world);
-		Effects::BasicFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose);
-		Effects::BasicFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mCylinderMat);
+		Effects::TexturedFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose, XMLoadFloat4x4(&mCylinderTexTransform));
+		Effects::TexturedFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mCylinderMat, mBricksMapSRV);
 		md3dImmediateContext->DrawIndexed(mCylinderIndexCount, mCylinderIndexOffset, mCylinderVertexOffset);
 	}
 
@@ -308,10 +345,16 @@ void ShapesApp::DrawScene()
 	{
 		world = XMLoadFloat4x4(&mSphereWorld[i]);
 		worldInvTranspose = MathHelper::InverseTranspose(world);
-		Effects::BasicFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose);
-		Effects::BasicFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mSphereMat);
+		Effects::TexturedFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose, XMLoadFloat4x4(&mSphereTexTransform));
+		Effects::TexturedFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mSphereMat, mStoneMapSRV);
 		md3dImmediateContext->DrawIndexed(mSphereIndexCount, mSphereIndexOffset, mSphereVertexOffset);
 	}
+
+	// Set vertex and pixel shaders
+	Effects::BasicFX->SetAsEffect(md3dImmediateContext);
+
+	// Set per frame constants.
+	Effects::BasicFX->SetConstantBufferPerFramePixelShader(md3dImmediateContext, mLightCount, mDirLights, mEyePosW);
 
 	// Draw the skull.
 	md3dImmediateContext->IASetVertexBuffers(0, 1, &mSkullVB, &stride, &offset);
@@ -420,36 +463,40 @@ void ShapesApp::BuildShapeGeometryBuffers()
 	// vertices of all the meshes into one vertex buffer.
 	//
 
-	std::vector<Vertex::PosNormal> vertices(totalVertexCount);
+	std::vector<Vertex::Basic32> vertices(totalVertexCount);
 
 	UINT k = 0;
 	for (size_t i = 0; i < box.Vertices.size(); i++, k++)
 	{
 		vertices[k].Pos = box.Vertices[i].Position;
 		vertices[k].Normal = box.Vertices[i].Normal;
+		vertices[k].Tex = box.Vertices[i].TexC;
 	}
 
 	for (size_t i = 0; i < grid.Vertices.size(); i++, k++)
 	{
 		vertices[k].Pos = grid.Vertices[i].Position;
 		vertices[k].Normal = grid.Vertices[i].Normal;
+		vertices[k].Tex = grid.Vertices[i].TexC;
 	}
 
 	for (size_t i = 0; i < sphere.Vertices.size(); i++, k++)
 	{
 		vertices[k].Pos = sphere.Vertices[i].Position;
 		vertices[k].Normal = sphere.Vertices[i].Normal;
+		vertices[k].Tex = sphere.Vertices[i].TexC;
 	}
 
 	for (size_t i = 0; i < cylinder.Vertices.size(); i++, k++)
 	{
 		vertices[k].Pos = cylinder.Vertices[i].Position;
 		vertices[k].Normal = cylinder.Vertices[i].Normal;
+		vertices[k].Tex = cylinder.Vertices[i].TexC;
 	}
 
 	D3D11_BUFFER_DESC vbd;
 	vbd.Usage = D3D11_USAGE_IMMUTABLE;
-	vbd.ByteWidth = sizeof(Vertex::PosNormal) * totalVertexCount;
+	vbd.ByteWidth = sizeof(Vertex::Basic32) * totalVertexCount;
 	vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	vbd.CPUAccessFlags = 0;
 	vbd.MiscFlags = 0;
@@ -498,7 +545,7 @@ void ShapesApp::BuildSkullGeometryBuffers()
 	fin >> ignore >> tcount;
 	fin >> ignore >> ignore >> ignore >> ignore;
 
-	std::vector<Vertex::PosNormal> vertices(vcount);
+	std::vector<Vertex::Basic32> vertices(vcount);
 	for (UINT i = 0; i < vcount; i++)
 	{
 		fin >> vertices[i].Pos.x >> vertices[i].Pos.y >> vertices[i].Pos.z;
@@ -521,7 +568,7 @@ void ShapesApp::BuildSkullGeometryBuffers()
 
 	D3D11_BUFFER_DESC vbd;
 	vbd.Usage = D3D11_USAGE_IMMUTABLE;
-	vbd.ByteWidth = sizeof(Vertex::PosNormal) * vcount;
+	vbd.ByteWidth = sizeof(Vertex::Basic32) * vcount;
 	vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
 	vbd.CPUAccessFlags = 0;
 	vbd.MiscFlags = 0;

@@ -48,6 +48,12 @@
     <FxCompile Include="BasicVertexShader.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
+    <FxCompile Include="TexturedPixelShader.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="TexturedVertexShader.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Basic.hlsli">
@@ -56,8 +62,22 @@
     <None Include="LightHelper.hlsli">
       <Filter>Shaders</Filter>
     </None>
+    <None Include="Textured.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Text Include="Models\skull.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="Textures\bricks.dds">
+      <Filter>Textures</Filter>
+    </Image>
+    <Image Include="Textures\floor.dds">
+      <Filter>Textures</Filter>
+    </Image>
+    <Image Include="Textures\stone.dds">
+      <Filter>Textures</Filter>
+    </Image>
   </ItemGroup>
 </Project>
