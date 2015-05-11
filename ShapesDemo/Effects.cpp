@@ -41,7 +41,7 @@ void BasicEffect::SetConstantBufferPerObjectVertexShader(ID3D11DeviceContext* dc
 	// Use a constant buffer. Effect framework deprecated
 	cbBasicPerObjectVs perObjectCB;
 	XMStoreFloat4x4(&perObjectCB.mWorldViewProj, XMMatrixTranspose(worldViewProj));
-	XMStoreFloat4x4(&perObjectCB.mWorld, world);
+	XMStoreFloat4x4(&perObjectCB.mWorld, XMMatrixTranspose(world));
 	XMStoreFloat4x4(&perObjectCB.mWorldInvTranspose, worldInvTranspose);
 
 	mCbPerObjectVs.Data = perObjectCB;
