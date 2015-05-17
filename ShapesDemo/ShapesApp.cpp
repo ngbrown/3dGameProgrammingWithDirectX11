@@ -314,7 +314,7 @@ void ShapesApp::DrawScene()
 	Effects::TexturedFX->SetAsEffect(md3dImmediateContext);
 
 	// Set per frame constants.
-	Effects::TexturedFX->SetConstantBufferPerFramePixelShader(md3dImmediateContext, mLightCount, mDirLights, mEyePosW);
+	Effects::TexturedFX->SetConstantBufferPerFramePixelShader(md3dImmediateContext, mLightCount, mDirLights, mEyePosW, Colors::LightSteelBlue);
 
 	// Draw the grid.
 	XMMATRIX world = XMLoadFloat4x4(&mGridWorld);
@@ -399,15 +399,15 @@ void ShapesApp::OnMouseMove(WPARAM btnState, int x, int y)
 	}
 	else if ((btnState & MK_RBUTTON) != 0)
 	{
-		// Make each pixel correspond to 0.01 unit in the scene.
-		float dx = 0.01f*static_cast<float>(x - mLastMousePos.x);
-		float dy = 0.01f*static_cast<float>(y - mLastMousePos.y);
+		// Make each pixel correspond to 0.1 unit in the scene.
+		float dx = 0.1f*static_cast<float>(x - mLastMousePos.x);
+		float dy = 0.1f*static_cast<float>(y - mLastMousePos.y);
 
 		// Update the camera radius based on input.
 		mRadius += dx - dy;
 
 		// Restrict the radius.
-		mRadius = MathHelper::Clamp(mRadius, 3.0f, 200.0f);
+		mRadius = MathHelper::Clamp(mRadius, 3.0f, 1200.0f);
 	}
 
 	mLastMousePos.x = x;
