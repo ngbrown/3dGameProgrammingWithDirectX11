@@ -108,12 +108,16 @@ void TexturedEffect::SetConstantBufferPerObjectVertexShader(ID3D11DeviceContext*
 	dc->VSSetConstantBuffers(0, 1, &buffer);
 }
 
-void TexturedEffect::SetConstantBufferPerFramePixelShader(ID3D11DeviceContext* dc, const int lightCount, const DirectionalLight* lights, const XMFLOAT3& eyePosW)
+void TexturedEffect::SetConstantBufferPerFramePixelShader(ID3D11DeviceContext* dc, const int lightCount, const DirectionalLight* lights, const XMFLOAT3& eyePosW, const XMVECTORF32& fogColor, float fogStart, float fogRange)
 {
 	cbBasicPerFramePs perFrameCB;
 	perFrameCB.mLightCount = lightCount;
 	memcpy(perFrameCB.mDirLights, lights, 3 * sizeof(DirectionalLight));
 	perFrameCB.mEyePosW = eyePosW;
+	perFrameCB.mFogColor = static_cast<const XMFLOAT4>(fogColor);
+	perFrameCB.mFogStart = fogStart;
+	perFrameCB.mFogRange = fogRange;
+
 
 	mCbPerFramePs.Data = perFrameCB;
 	mCbPerFramePs.ApplyChanges(dc);
@@ -121,11 +125,13 @@ void TexturedEffect::SetConstantBufferPerFramePixelShader(ID3D11DeviceContext* d
 	dc->PSSetConstantBuffers(0, 1, &buffer);
 }
 
-void TexturedEffect::SetConstantBufferPerObjectPixelShader(ID3D11DeviceContext* dc, const Material& mat, ID3D11ShaderResourceView* pShaderResourceView)
+void TexturedEffect::SetConstantBufferPerObjectPixelShader(ID3D11DeviceContext* dc, const Material& mat, ID3D11ShaderResourceView* pShaderResourceView, bool useTexture, bool useFog)
 {
 	cbBasicPerObjectPs perObjectCB;
 	perObjectCB.mMaterial = mat;
-	perObjectCB.mUseTexture = true;
+	perObjectCB.mUseTexture = useTexture;
+	perObjectCB.mAlphaClip = true;
+	perObjectCB.mFogEnabled = useFog;
 
 	mCbPerObjectPs.Data = perObjectCB;
 	mCbPerObjectPs.ApplyChanges(dc);

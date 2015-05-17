@@ -89,11 +89,13 @@
   <ItemGroup>
     <ClCompile Include="Effects.cpp" />
     <ClCompile Include="HillsApp.cpp" />
+    <ClCompile Include="RenderStates.cpp" />
     <ClCompile Include="Vertex.cpp" />
     <ClCompile Include="Waves.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Effects.h" />
+    <ClInclude Include="RenderStates.h" />
     <ClInclude Include="Vertex.h" />
     <ClInclude Include="Waves.h" />
   </ItemGroup>
@@ -106,6 +108,7 @@
     <Image Include="Textures\grass.dds" />
     <Image Include="Textures\water1.dds" />
     <Image Include="Textures\water2.dds" />
+    <Image Include="Textures\WireFence.dds" />
     <Image Include="Textures\WoodCrate01.dds" />
     <Image Include="Textures\WoodCrate02.dds" />
   </ItemGroup>
@@ -117,6 +120,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Textures\water2.dds">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Textures\WireFence.dds">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Textures\WoodCrate01.dds">

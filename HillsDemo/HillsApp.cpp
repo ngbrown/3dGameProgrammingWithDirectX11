@@ -6,10 +6,15 @@
 // the vertex buffers are updated every frame with the new snapshot of the wave simulation.
 // Demonstrates 3D lighting with directional, point, and spot lights.
 // Demonstrates texture tiling and texture animation.
+// Demonstrates blending, HLSL clip(), and fogging.
 //
 // Controls:
 //		Hold the left mouse button down and move the mouse to rotate.
 //      Hold the right mouse button down to zoom in and out.
+//
+//      Press '1' - Lighting only render mode.
+//      Press '2' - Texture render mode.
+//      Press '3' - Fog render mode.
 //
 //***************************************************************************************
 
@@ -23,9 +28,17 @@
 #include "Effects.h"
 
 #include "Waves.h"
+#include "RenderStates.h"
 
 using namespace DirectX;
 using namespace DirectX::PackedVector;
+
+enum RenderOptions
+{
+	Lighting = 0,
+	Textures = 1,
+	TexturesAndFog = 2
+};
 
 class HillsApp : public D3DApp
 {
@@ -48,6 +61,7 @@ private:
 	void BuildGeometryBuffers();
 	void BuildLandGeometryBuffers();
 	void BuildWaveGeometryBuffers();
+	void BuildCrateGeometryBuffers();
 
 private:
 	ID3D11Buffer* mLandVB;
@@ -56,14 +70,19 @@ private:
 	ID3D11Buffer* mWavesVB;
 	ID3D11Buffer* mWavesIB;
 
+	ID3D11Buffer* mBoxVB;
+	ID3D11Buffer* mBoxIB;
+
 	ID3D11ShaderResourceView* mGrassMapSRV;
 	ID3D11ShaderResourceView* mWavesMapSRV;
+	ID3D11ShaderResourceView* mBoxMapSRV;
 
 	Waves mWaves;
 
 	DirectionalLight mDirLights[3];
 	Material mLandMat;
 	Material mWavesMat;
+	Material mBoxMat;
 
 	XMFLOAT4X4 mGrassTexTransform;
 	XMFLOAT4X4 mWaterTexTransform;
@@ -71,12 +90,16 @@ private:
 	// Define transformations from local spaces to world space.
 	XMFLOAT4X4 mLandWorld;
 	XMFLOAT4X4 mWavesWorld;
+	XMFLOAT4X4 mBoxWorld;
 
 	XMFLOAT4X4 mView;
 	XMFLOAT4X4 mProj;
 
 	UINT mLandIndexCount;
+
 	XMFLOAT2 mWaterTexOffset;
+
+	RenderOptions mRenderOptions;
 
 	XMFLOAT3 mEyePosW;
 
@@ -110,10 +133,14 @@ HillsApp::HillsApp(HINSTANCE hInstance)
 	mLandIB(nullptr),
 	mWavesVB(nullptr),
 	mWavesIB(nullptr),
+	mBoxVB(nullptr),
+	mBoxIB(nullptr),
 	mGrassMapSRV(nullptr),
 	mWavesMapSRV(nullptr),
+	mBoxMapSRV(nullptr),
 	mLandIndexCount(0),
 	mWaterTexOffset(0.0f, 0.0f),
+	mRenderOptions(RenderOptions::TexturesAndFog),
 	mEyePosW(0.0f, 0.0f, 0.0f),
 	mTheta(1.3f*MathHelper::Pi),
 	mPhi(0.4f*MathHelper::Pi),
@@ -129,6 +156,10 @@ HillsApp::HillsApp(HINSTANCE hInstance)
 	XMStoreFloat4x4(&mWavesWorld, I);
 	XMStoreFloat4x4(&mView, I);
 	XMStoreFloat4x4(&mProj, I);
+
+	XMMATRIX boxScale = XMMatrixScaling(15.0f, 15.0f, 15.0f);
+	XMMATRIX boxOffset = XMMatrixTranslation(8.0f, 5.0f, -15.0f);
+	XMStoreFloat4x4(&mBoxWorld, boxScale*boxOffset);
 
 	XMMATRIX grassTexScale = XMMatrixScaling(5.0f, 5.0f, 0.0f);
 	XMStoreFloat4x4(&mGrassTexTransform, grassTexScale);
@@ -153,21 +184,30 @@ HillsApp::HillsApp(HINSTANCE hInstance)
 	mLandMat.Specular = XMFLOAT4(0.2f, 0.2f, 0.2f, 16.0f);
 
 	mWavesMat.Ambient  = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
-	mWavesMat.Diffuse  = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	mWavesMat.Diffuse  = XMFLOAT4(1.0f, 1.0f, 1.0f, 0.5f);
 	mWavesMat.Specular = XMFLOAT4(0.8f, 0.8f, 0.8f, 32.0f);
+
+	mBoxMat.Ambient  = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+	mBoxMat.Diffuse  = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	mBoxMat.Specular = XMFLOAT4(0.4f, 0.4f, 0.4f, 16.0f);
 }
 
 HillsApp::~HillsApp()
 {
+	md3dImmediateContext->ClearState();
 	ReleaseCOM(mLandVB);
 	ReleaseCOM(mLandIB);
 	ReleaseCOM(mWavesVB);
 	ReleaseCOM(mWavesIB);
+	ReleaseCOM(mBoxVB);
+	ReleaseCOM(mBoxIB);
 	ReleaseCOM(mGrassMapSRV);
 	ReleaseCOM(mWavesMapSRV);
+	ReleaseCOM(mBoxMapSRV);
 
 	Effects::DestroyAll();
 	InputLayouts::DestroyAll();
+	RenderStates::DestroyAll();
 }
 
 bool HillsApp::Init()
@@ -175,11 +215,12 @@ bool HillsApp::Init()
 	if (!D3DApp::Init())
 		return false;
 
-	mWaves.Init(160, 160, 1.0f, 0.03f, 3.25f, 0.4f);
+	mWaves.Init(160, 160, 1.0f, 0.03f, 5.0f, 0.3f);
 
 	// Must init Effects first since InputLayouts depend on shader signatures.
 	Effects::InitAll(md3dDevice);
 	InputLayouts::InitAll(md3dDevice);
+	RenderStates::InitAll(md3dDevice);
 
 	// Set a default sampler
 	Effects::TexturedFX->SetSampler(md3dImmediateContext);
@@ -190,6 +231,9 @@ bool HillsApp::Init()
 	ReleaseCOM(tex);
 
 	HR(CreateDDSTextureFromFile(md3dDevice, L"Textures/water2.dds", &tex, &mWavesMapSRV));
+	ReleaseCOM(tex);
+
+	HR(CreateDDSTextureFromFile(md3dDevice, L"Textures/WireFence.dds", &tex, &mBoxMapSRV));
 	ReleaseCOM(tex);
 
 	BuildGeometryBuffers();
@@ -227,14 +271,14 @@ void HillsApp::UpdateScene(float dt)
 	// Every quarter second, generate a random wave.
 	//
 	static float t_base = 0.0f;
-	if ((mTimer.TotalTime() - t_base) >= 0.25f)
+	if ((mTimer.TotalTime() - t_base) >= 0.1f)
 	{
-		t_base += 0.25f;
+		t_base += 0.1f;
 
 		DWORD i = 5 + rand() % (mWaves.RowCount() - 10);
 		DWORD j = 5 + rand() % (mWaves.ColumnCount() - 10);
 
-		float r = MathHelper::RandF(1.0f, 2.0f);
+		float r = MathHelper::RandF(0.5f, 1.0f);
 
 		mWaves.Disturb(i, j, r);
 	}
@@ -275,15 +319,29 @@ void HillsApp::UpdateScene(float dt)
 
 	// Combine scale and translation.
 	XMStoreFloat4x4(&mWaterTexTransform, wavesScale*wavesOffset);
+
+	//
+	// Switch the render mode based in key input.
+	//
+	if( GetAsyncKeyState('1') & 0x8000 )
+		mRenderOptions = RenderOptions::Lighting; 
+
+	if( GetAsyncKeyState('2') & 0x8000 )
+		mRenderOptions = RenderOptions::Textures; 
+
+	if( GetAsyncKeyState('3') & 0x8000 )
+		mRenderOptions = RenderOptions::TexturesAndFog; 
 }
 
 void HillsApp::DrawScene()
 {
-	md3dImmediateContext->ClearRenderTargetView(mRenderTargetView, reinterpret_cast<const float*>(&Colors::LightSteelBlue));
+	md3dImmediateContext->ClearRenderTargetView(mRenderTargetView, reinterpret_cast<const float*>(&Colors::Silver));
 	md3dImmediateContext->ClearDepthStencilView(mDepthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
 	md3dImmediateContext->IASetInputLayout(InputLayouts::Basic32);
 	md3dImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	float blendFactor[] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
 	// Set vertex and pixel shaders
 	Effects::TexturedFX->SetAsEffect(md3dImmediateContext);
@@ -296,8 +354,46 @@ void HillsApp::DrawScene()
 	XMMATRIX proj = XMLoadFloat4x4(&mProj);
 	XMMATRIX viewProj = view*proj;
 
+	bool useTextures;
+	bool useFog;
+
+	switch (mRenderOptions)
+	{
+	default:
+	case Lighting:
+		useTextures = false;
+		useFog = false;
+		break;
+	case Textures:
+		useTextures = true;
+		useFog = false;
+		break;
+	case TexturesAndFog:
+		useTextures = true;
+		useFog = true;
+		break;
+	}
+
 	// Set per frame constants.
-	Effects::TexturedFX->SetConstantBufferPerFramePixelShader(md3dImmediateContext, 3, mDirLights, mEyePosW);
+	Effects::TexturedFX->SetConstantBufferPerFramePixelShader(
+		md3dImmediateContext, 3, mDirLights, mEyePosW, Colors::Silver, 15.0f, 175.0f);
+
+	//
+	// Draw the box
+	//
+	md3dImmediateContext->IASetVertexBuffers(0, 1, &mBoxVB, &stride, &offset);
+	md3dImmediateContext->IASetIndexBuffer(mBoxIB, DXGI_FORMAT_R32_UINT, 0);
+
+	// Set per object constants.
+	XMMATRIX world = XMLoadFloat4x4(&mBoxWorld);
+	XMMATRIX worldInvTranspose = MathHelper::InverseTranspose(world);
+	Effects::TexturedFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose, XMMatrixIdentity());
+	Effects::TexturedFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mBoxMat, mBoxMapSRV, useTextures, useFog);
+	md3dImmediateContext->RSSetState(RenderStates::NoCullRS);
+	md3dImmediateContext->DrawIndexed(36, 0, 0);
+
+	// Restore default render state
+	md3dImmediateContext->RSSetState(nullptr);
 
 	//
 	// Draw the hills
@@ -305,10 +401,11 @@ void HillsApp::DrawScene()
 	md3dImmediateContext->IASetVertexBuffers(0, 1, &mLandVB, &stride, &offset);
 	md3dImmediateContext->IASetIndexBuffer(mLandIB, DXGI_FORMAT_R32_UINT, 0);
 
-	XMMATRIX world = XMLoadFloat4x4(&mLandWorld);
-	XMMATRIX worldInvTranspose = MathHelper::InverseTranspose(world);
+	// Set per object constants.
+	world = XMLoadFloat4x4(&mLandWorld);
+	worldInvTranspose = MathHelper::InverseTranspose(world);
 	Effects::TexturedFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose, XMLoadFloat4x4(&mGrassTexTransform));
-	Effects::TexturedFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mLandMat, mGrassMapSRV);
+	Effects::TexturedFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mLandMat, mGrassMapSRV, useTextures, useFog);
 	md3dImmediateContext->DrawIndexed(mLandIndexCount, 0, 0);
 
 	//
@@ -318,12 +415,18 @@ void HillsApp::DrawScene()
 	md3dImmediateContext->IASetVertexBuffers(0, 1, &mWavesVB, &stride, &offset);
 	md3dImmediateContext->IASetIndexBuffer(mWavesIB, DXGI_FORMAT_R32_UINT, 0);
 
+	// Set per object constants.
 	world = XMLoadFloat4x4(&mWavesWorld);
 	worldInvTranspose = MathHelper::InverseTranspose(world);
 
+	md3dImmediateContext->OMSetBlendState(RenderStates::TransparentBS, blendFactor, 0xffffffff);
+
 	Effects::TexturedFX->SetConstantBufferPerObjectVertexShader(md3dImmediateContext, world*viewProj, world, worldInvTranspose, XMLoadFloat4x4(&mWaterTexTransform));
-	Effects::TexturedFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mWavesMat, mWavesMapSRV);
+	Effects::TexturedFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mWavesMat, mWavesMapSRV, useTextures, useFog);
 	md3dImmediateContext->DrawIndexed(3 * mWaves.TriangleCount(), 0, 0);
+
+	// Restore default blend state
+	md3dImmediateContext->OMSetBlendState(nullptr, blendFactor, 0xffffffff);
 
 	HR(mSwapChain->Present(0, 0));
 }
@@ -358,15 +461,15 @@ void HillsApp::OnMouseMove(WPARAM btnState, int x, int y)
 	}
 	else if ((btnState & MK_RBUTTON) != 0)
 	{
-		// Make each pixel correspond to 0.01 unit in the scene.
-		float dx = 0.05f*static_cast<float>(x - mLastMousePos.x);
-		float dy = 0.05f*static_cast<float>(y - mLastMousePos.y);
+		// Make each pixel correspond to 0.1 unit in the scene.
+		float dx = 0.1f*static_cast<float>(x - mLastMousePos.x);
+		float dy = 0.1f*static_cast<float>(y - mLastMousePos.y);
 
 		// Update the camera radius based on input.
 		mRadius += dx - dy;
 
 		// Restrict the radius.
-		mRadius = MathHelper::Clamp(mRadius, 50.0f, 500.0f);
+		mRadius = MathHelper::Clamp(mRadius, 20.0f, 500.0f);
 	}
 
 	mLastMousePos.x = x;
@@ -377,6 +480,7 @@ void HillsApp::BuildGeometryBuffers()
 {
 	BuildLandGeometryBuffers();
 	BuildWaveGeometryBuffers();
+	BuildCrateGeometryBuffers();
 }
 
 float HillsApp::GetHillHeight(float x, float z) const
@@ -401,6 +505,7 @@ XMFLOAT3 HillsApp::GetHillNormal(float x, float z) const
 void HillsApp::BuildLandGeometryBuffers()
 {
 	GeometryGenerator::MeshData grid;
+ 
 	GeometryGenerator geoGen;
 
 	geoGen.CreateGrid(160.0f, 160.0f, 50, 50, grid);
@@ -416,6 +521,7 @@ void HillsApp::BuildLandGeometryBuffers()
 	for (size_t i = 0; i < grid.Vertices.size(); i++)
 	{
 		XMFLOAT3 p = grid.Vertices[i].Position;
+
 		p.y = GetHillHeight(p.x, p.z);
 
 		vertices[i].Pos = p;
@@ -497,4 +603,50 @@ void HillsApp::BuildWaveGeometryBuffers()
 	D3D11_SUBRESOURCE_DATA iinitData;
 	iinitData.pSysMem = &indices[0];
 	HR(md3dDevice->CreateBuffer(&ibd, &iinitData, &mWavesIB));
+}
+
+void HillsApp::BuildCrateGeometryBuffers()
+{
+	GeometryGenerator::MeshData box;
+
+	GeometryGenerator geoGen;
+	geoGen.CreateBox(1.0f, 1.0f, 1.0f, box);
+
+	//
+	// Extract the vertex elements we are interested in and pack the
+	// vertices of all the meshes into one vertex buffer.
+	//
+
+	std::vector<Vertex::Basic32> vertices(box.Vertices.size());
+
+	for (size_t i = 0; i < box.Vertices.size(); i++)
+	{
+		vertices[i].Pos = box.Vertices[i].Position;
+		vertices[i].Normal = box.Vertices[i].Normal;
+		vertices[i].Tex = box.Vertices[i].TexC;
+	}
+
+	D3D11_BUFFER_DESC vbd;
+	vbd.Usage = D3D11_USAGE_IMMUTABLE;
+	vbd.ByteWidth = sizeof(Vertex::Basic32) * box.Vertices.size();
+	vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	vbd.CPUAccessFlags = 0;
+	vbd.MiscFlags = 0;
+	D3D11_SUBRESOURCE_DATA vinitData;
+	vinitData.pSysMem = &vertices[0];
+	HR(md3dDevice->CreateBuffer(&vbd, &vinitData, &mBoxVB));
+
+	//
+	// Pack the indices of all the meshes into one index buffer.
+	//
+
+	D3D11_BUFFER_DESC ibd;
+	ibd.Usage = D3D11_USAGE_IMMUTABLE;
+	ibd.ByteWidth = sizeof(UINT) * box.Indices.size();
+	ibd.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	ibd.CPUAccessFlags = 0;
+	ibd.MiscFlags = 0;
+	D3D11_SUBRESOURCE_DATA iinitData;
+	iinitData.pSysMem = &box.Indices[0];
+	HR(md3dDevice->CreateBuffer(&ibd, &iinitData, &mBoxIB));
 }

@@ -27,6 +27,8 @@ cbuffer cbPerObject
 {
 	Material gMaterial;
 	bool gUseTexure;
+	bool gAlphaClip;
+	bool gFogEnabled;
 };
 
 // Nonnumeric values cannot be added to a cbuffer.
@@ -54,6 +56,14 @@ float4 main(VertexOut pin) : SV_Target
 	{
 		// Sample texture.
 		texColor = gDiffuseMap.Sample(samAnisotropic, pin.Tex);
+
+		if (gAlphaClip)
+		{
+			// Discard pixel if texture alpha < 0.1.  Note that we do this
+			// test as soon as possible so that we can potentially exit the shader 
+			// early, thereby skipping the rest of the shader code.
+			clip(texColor.a - 0.1f);
+		}
 	}
 
 	//
@@ -82,6 +92,18 @@ float4 main(VertexOut pin) : SV_Target
 
 		// Modulate with late add
 		litColor = texColor*(ambient + diffuse) + spec;
+	}
+
+	//
+	// Fogging
+	//
+
+	if (gFogEnabled)
+	{
+		float fogLerp = saturate((distToEye - gFogStart) / gFogRange);
+
+		// Blend the fog color and the lit color.
+		litColor = lerp(litColor, gFogColor, fogLerp);
 	}
 
 	// Common to take alpha from diffuse material and texture.
