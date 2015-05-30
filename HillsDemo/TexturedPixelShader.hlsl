@@ -7,7 +7,6 @@
 #include "Textured.hlsli"
 #include "LightHelper.hlsli"
 
-
 cbuffer cbPerFrame
 {
 	int gLightCount;

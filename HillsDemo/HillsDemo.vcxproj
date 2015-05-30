@@ -87,15 +87,21 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="BasicEffect.cpp" />
+    <ClCompile Include="Effect.cpp" />
     <ClCompile Include="Effects.cpp" />
     <ClCompile Include="HillsApp.cpp" />
     <ClCompile Include="RenderStates.cpp" />
+    <ClCompile Include="TexturedEffect.cpp" />
     <ClCompile Include="Vertex.cpp" />
     <ClCompile Include="Waves.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="BasicEffect.h" />
+    <ClInclude Include="Effect.h" />
     <ClInclude Include="Effects.h" />
     <ClInclude Include="RenderStates.h" />
+    <ClInclude Include="TexturedEffect.h" />
     <ClInclude Include="Vertex.h" />
     <ClInclude Include="Waves.h" />
   </ItemGroup>
