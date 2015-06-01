@@ -18,6 +18,7 @@ TexturedEffect::~TexturedEffect()
 void TexturedEffect::SetAsEffect(ID3D11DeviceContext* dc)
 {
 	dc->PSSetShader(mPixelShader, nullptr, 0);
+	dc->GSSetShader(nullptr, nullptr, 0);
 	dc->VSSetShader(mVertexShader, nullptr, 0);
 }
 

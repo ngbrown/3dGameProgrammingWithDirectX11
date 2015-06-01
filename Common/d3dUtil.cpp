@@ -3,16 +3,14 @@
 //***************************************************************************************
 
 #include "d3dUtil.h"
+#include "DDSTextureLoader.h"
 
 using namespace DirectX;
 
-/* Will need to be replaced with calls to GenerateMipMaps or GenerateMipMaps3D.
+/* Will need to be replaced with calls to GenerateMipMaps or GenerateMipMaps3D. */
 ID3D11ShaderResourceView* d3dHelper::CreateTexture2DArraySRV(
 		ID3D11Device* device, ID3D11DeviceContext* context,
-		std::vector<std::wstring>& filenames,
-		DXGI_FORMAT format,
-		UINT filter, 
-		UINT mipFilter)
+		std::vector<std::wstring>& filenames)
 {
 	//
 	// Load the texture elements individually from file.  These textures
@@ -26,24 +24,16 @@ ID3D11ShaderResourceView* d3dHelper::CreateTexture2DArraySRV(
 	std::vector<ID3D11Texture2D*> srcTex(size);
 	for(UINT i = 0; i < size; ++i)
 	{
-		D3DX11_IMAGE_LOAD_INFO loadInfo;
-
-        loadInfo.Width  = D3DX11_FROM_FILE;
-        loadInfo.Height = D3DX11_FROM_FILE;
-        loadInfo.Depth  = D3DX11_FROM_FILE;
-        loadInfo.FirstMipLevel = 0;
-        loadInfo.MipLevels = D3DX11_FROM_FILE;
-        loadInfo.Usage = D3D11_USAGE_STAGING;
-        loadInfo.BindFlags = 0;
-        loadInfo.CpuAccessFlags = D3D11_CPU_ACCESS_WRITE | D3D11_CPU_ACCESS_READ;
-        loadInfo.MiscFlags = 0;
-        loadInfo.Format = format;
-        loadInfo.Filter = filter;
-        loadInfo.MipFilter = mipFilter;
-		loadInfo.pSrcInfo  = 0;
-
-        HR(D3DX11CreateTextureFromFile(device, filenames[i].c_str(), 
-			&loadInfo, 0, (ID3D11Resource**)&srcTex[i], 0));
+		HR(CreateDDSTextureFromFileEx(device, 
+			filenames[i].c_str(), 
+			0,
+			D3D11_USAGE_STAGING,
+			0,
+			D3D11_CPU_ACCESS_WRITE | D3D11_CPU_ACCESS_READ,
+			0,
+			false,
+			reinterpret_cast<ID3D11Resource**>(&srcTex[i]), 
+			nullptr));
 	}
 
 	//
@@ -117,7 +107,7 @@ ID3D11ShaderResourceView* d3dHelper::CreateTexture2DArraySRV(
 
 	return texArraySRV;
 }
-*/
+/**/
 
 ID3D11ShaderResourceView* d3dHelper::CreateRandomTexture1DSRV(ID3D11Device* device)
 {

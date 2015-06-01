@@ -7,6 +7,7 @@
 // Demonstrates 3D lighting with directional, point, and spot lights.
 // Demonstrates texture tiling and texture animation.
 // Demonstrates blending, HLSL clip(), and fogging.
+// Demonstrates the geometry shader, texture arrays, and alpha to coverage.
 //
 // Controls:
 //		Hold the left mouse button down and move the mouse to rotate.
@@ -15,6 +16,8 @@
 //      Press '1' - Lighting only render mode.
 //      Press '2' - Texture render mode.
 //      Press '3' - Fog render mode.
+//      Press 'r' - Alpha-to-coverage on.
+//      Press 't' - Alpha-to-coverage off.
 //
 //***************************************************************************************
 
@@ -62,6 +65,8 @@ private:
 	void BuildLandGeometryBuffers();
 	void BuildWaveGeometryBuffers();
 	void BuildCrateGeometryBuffers();
+	void BuildTreeSpritesBuffer();
+	void DrawTreeSprites(CXMMATRIX viewProj);
 
 private:
 	ID3D11Buffer* mLandVB;
@@ -73,9 +78,12 @@ private:
 	ID3D11Buffer* mBoxVB;
 	ID3D11Buffer* mBoxIB;
 
+	ID3D11Buffer* mTreeSpritesVB;
+
 	ID3D11ShaderResourceView* mGrassMapSRV;
 	ID3D11ShaderResourceView* mWavesMapSRV;
 	ID3D11ShaderResourceView* mBoxMapSRV;
+	ID3D11ShaderResourceView* mTreeTextureMapArraySRV;
 
 	Waves mWaves;
 
@@ -83,6 +91,7 @@ private:
 	Material mLandMat;
 	Material mWavesMat;
 	Material mBoxMat;
+	Material mTreeMat;
 
 	XMFLOAT4X4 mGrassTexTransform;
 	XMFLOAT4X4 mWaterTexTransform;
@@ -96,6 +105,10 @@ private:
 	XMFLOAT4X4 mProj;
 
 	UINT mLandIndexCount;
+
+	static const UINT TreeCount = 16;
+
+	bool mAlphaToCoverageOn;
 
 	XMFLOAT2 mWaterTexOffset;
 
@@ -135,9 +148,11 @@ HillsApp::HillsApp(HINSTANCE hInstance)
 	mWavesIB(nullptr),
 	mBoxVB(nullptr),
 	mBoxIB(nullptr),
+	mTreeSpritesVB(nullptr),
 	mGrassMapSRV(nullptr),
 	mWavesMapSRV(nullptr),
 	mBoxMapSRV(nullptr),
+	mAlphaToCoverageOn(true),
 	mLandIndexCount(0),
 	mWaterTexOffset(0.0f, 0.0f),
 	mRenderOptions(RenderOptions::TexturesAndFog),
@@ -190,6 +205,10 @@ HillsApp::HillsApp(HINSTANCE hInstance)
 	mBoxMat.Ambient  = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
 	mBoxMat.Diffuse  = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	mBoxMat.Specular = XMFLOAT4(0.4f, 0.4f, 0.4f, 16.0f);
+
+	mTreeMat.Ambient  = XMFLOAT4(0.5f, 0.5f, 0.5f, 1.0f);
+	mTreeMat.Diffuse  = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	mTreeMat.Specular = XMFLOAT4(0.2f, 0.2f, 0.2f, 16.0f);
 }
 
 HillsApp::~HillsApp()
@@ -201,9 +220,11 @@ HillsApp::~HillsApp()
 	ReleaseCOM(mWavesIB);
 	ReleaseCOM(mBoxVB);
 	ReleaseCOM(mBoxIB);
+	ReleaseCOM(mTreeSpritesVB);
 	ReleaseCOM(mGrassMapSRV);
 	ReleaseCOM(mWavesMapSRV);
 	ReleaseCOM(mBoxMapSRV);
+	ReleaseCOM(mTreeTextureMapArraySRV);
 
 	Effects::DestroyAll();
 	InputLayouts::DestroyAll();
@@ -222,9 +243,6 @@ bool HillsApp::Init()
 	InputLayouts::InitAll(md3dDevice);
 	RenderStates::InitAll(md3dDevice);
 
-	// Set a default sampler
-	Effects::TexturedFX->SetSampler(md3dImmediateContext);
-
 	// Use DirectXTex instead of D3DX11CreateShaderResourceViewFromFile
 	ID3D11Resource* tex = nullptr;
 	HR(CreateDDSTextureFromFile(md3dDevice, L"Textures/grass.dds", &tex, &mGrassMapSRV));
@@ -235,6 +253,15 @@ bool HillsApp::Init()
 
 	HR(CreateDDSTextureFromFile(md3dDevice, L"Textures/WireFence.dds", &tex, &mBoxMapSRV));
 	ReleaseCOM(tex);
+
+	std::vector<std::wstring> treeFilenames;
+	treeFilenames.push_back(L"Textures/tree0.dds");
+	treeFilenames.push_back(L"Textures/tree1.dds");
+	treeFilenames.push_back(L"Textures/tree2.dds");
+	treeFilenames.push_back(L"Textures/tree3.dds");
+
+	mTreeTextureMapArraySRV = d3dHelper::CreateTexture2DArraySRV(
+		md3dDevice, md3dImmediateContext, treeFilenames);
 
 	BuildGeometryBuffers();
 
@@ -331,6 +358,12 @@ void HillsApp::UpdateScene(float dt)
 
 	if( GetAsyncKeyState('3') & 0x8000 )
 		mRenderOptions = RenderOptions::TexturesAndFog; 
+
+	if( GetAsyncKeyState('R') & 0x8000 )
+		mAlphaToCoverageOn = true;
+
+	if( GetAsyncKeyState('T') & 0x8000 )
+		mAlphaToCoverageOn = false;
 }
 
 void HillsApp::DrawScene()
@@ -338,21 +371,35 @@ void HillsApp::DrawScene()
 	md3dImmediateContext->ClearRenderTargetView(mRenderTargetView, reinterpret_cast<const float*>(&Colors::Silver));
 	md3dImmediateContext->ClearDepthStencilView(mDepthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1.0f, 0);
 
-	md3dImmediateContext->IASetInputLayout(InputLayouts::Basic32);
-	md3dImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
 	float blendFactor[] = { 0.0f, 0.0f, 0.0f, 0.0f };
-
-	// Set vertex and pixel shaders
-	Effects::TexturedFX->SetAsEffect(md3dImmediateContext);
-
-	UINT stride = sizeof(Vertex::Basic32);
-	UINT offset = 0;
 
 	// Set constants
 	XMMATRIX view = XMLoadFloat4x4(&mView);
 	XMMATRIX proj = XMLoadFloat4x4(&mProj);
 	XMMATRIX viewProj = view*proj;
+
+	//
+	// Draw the tree sprites
+	//
+
+	DrawTreeSprites(viewProj);
+
+	//
+	// DrawTreeSprites() changes InputLayout and PrimitiveTopology, so change it based on 
+	// the geometry we draw next.
+	//
+
+	md3dImmediateContext->IASetInputLayout(InputLayouts::Basic32);
+    md3dImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	// Set vertex and pixel shaders
+	Effects::TexturedFX->SetAsEffect(md3dImmediateContext);
+
+	// Set a default sampler
+	Effects::TexturedFX->SetSampler(md3dImmediateContext);
+
+	UINT stride = sizeof(Vertex::Basic32);
+	UINT offset = 0;
 
 	bool useTextures;
 	bool useFog;
@@ -481,6 +528,7 @@ void HillsApp::BuildGeometryBuffers()
 	BuildLandGeometryBuffers();
 	BuildWaveGeometryBuffers();
 	BuildCrateGeometryBuffers();
+	BuildTreeSpritesBuffer();
 }
 
 float HillsApp::GetHillHeight(float x, float z) const
@@ -649,4 +697,85 @@ void HillsApp::BuildCrateGeometryBuffers()
 	D3D11_SUBRESOURCE_DATA iinitData;
 	iinitData.pSysMem = &box.Indices[0];
 	HR(md3dDevice->CreateBuffer(&ibd, &iinitData, &mBoxIB));
+}
+
+void HillsApp::BuildTreeSpritesBuffer()
+{
+	Vertex::TreePointSprite v[TreeCount];
+
+	for(UINT i = 0; i < TreeCount; ++i)
+	{
+		float x = MathHelper::RandF(-65.0f, 65.0f);
+		float z = MathHelper::RandF(-65.0f, 65.0f);
+		float y = GetHillHeight(x,z);
+
+		// Move tree slightly above land height.
+		y += 10.0f;
+
+		v[i].Pos  = XMFLOAT3(x,y,z);
+		v[i].Size = XMFLOAT2(24.0f, 24.0f);
+	}
+     
+	D3D11_BUFFER_DESC vbd;
+    vbd.Usage = D3D11_USAGE_IMMUTABLE;
+	vbd.ByteWidth = sizeof(Vertex::TreePointSprite) * TreeCount;
+    vbd.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    vbd.CPUAccessFlags = 0;
+    vbd.MiscFlags = 0;
+    D3D11_SUBRESOURCE_DATA vinitData;
+    vinitData.pSysMem = v;
+    HR(md3dDevice->CreateBuffer(&vbd, &vinitData, &mTreeSpritesVB));
+}
+
+void HillsApp::DrawTreeSprites(CXMMATRIX viewProj)
+{
+	bool useTextures;
+	bool useFog;
+
+	switch (mRenderOptions)
+	{
+	default:
+	case Lighting:
+		useTextures = false;
+		useFog = false;
+		break;
+	case Textures:
+		useTextures = true;
+		useFog = false;
+		break;
+	case TexturesAndFog:
+		useTextures = true;
+		useFog = true;
+		break;
+	}
+
+	// Set vertex, geometry, and pixel shaders
+	Effects::TreeSpriteFX->SetAsEffect(md3dImmediateContext);
+
+	// Set sampler
+	Effects::TreeSpriteFX->SetSampler(md3dImmediateContext);
+
+	Effects::TreeSpriteFX->SetConstantBufferPerFrameGeometryShader(md3dImmediateContext, mEyePosW);
+	Effects::TreeSpriteFX->SetConstantBufferPerFramePixelShader(md3dImmediateContext, 3, mDirLights, mEyePosW, Colors::Silver, 15.0f, 175.0f);
+
+	Effects::TreeSpriteFX->SetConstantBufferPerObjectGeometryShader(md3dImmediateContext, viewProj);
+	Effects::TreeSpriteFX->SetConstantBufferPerObjectPixelShader(md3dImmediateContext, mTreeMat, mTreeTextureMapArraySRV, useTextures, useFog);
+
+	md3dImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_POINTLIST);
+	md3dImmediateContext->IASetInputLayout(InputLayouts::TreePointSprite);
+	UINT stride = sizeof(Vertex::TreePointSprite);
+    UINT offset = 0;
+
+	md3dImmediateContext->IASetVertexBuffers(0, 1, &mTreeSpritesVB, &stride, &offset);
+
+	float blendFactor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+
+	if(mAlphaToCoverageOn)
+	{
+		md3dImmediateContext->OMSetBlendState(RenderStates::AlphaToCoverageBS, blendFactor, 0xffffffff);
+	}
+
+	md3dImmediateContext->Draw(TreeCount, 0);
+
+	md3dImmediateContext->OMSetBlendState(0, blendFactor, 0xffffffff);
 }

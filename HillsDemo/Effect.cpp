@@ -14,6 +14,13 @@ Effect::Effect(ID3D11Device* device, const std::wstring& vertexShaderFilename, c
 	HR(device->CreatePixelShader(mPSBlob->GetBufferPointer(), mPSBlob->GetBufferSize(), nullptr, &mPixelShader));
 }
 
+Effect::Effect(ID3D11Device* device, const std::wstring& vertexShaderFilename, const std::wstring& geometryShaderFilename, const std::wstring& pixelShaderFilename)
+	:Effect(device, vertexShaderFilename, pixelShaderFilename)
+{
+	HR(ShaderHelper::LoadCompiledShader(geometryShaderFilename, &mGSBlob));
+	HR(device->CreateGeometryShader(mGSBlob->GetBufferPointer(), mGSBlob->GetBufferSize(), nullptr, &mGeometryShader));
+}
+
 Effect::~Effect()
 {
 }
