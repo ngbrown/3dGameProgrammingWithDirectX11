@@ -85,17 +85,14 @@ inline void DXTraceIfFailedHr(_In_z_ const WCHAR* strFile, _In_ DWORD dwLine, _I
 class d3dHelper
 {
 public:
-	/* Replaced with calls to GenerateMipMaps or GenerateMipMaps3D.
+	/* Replaced with calls to GenerateMipMaps or GenerateMipMaps3D. */
 	///<summary>
 	/// Does not work with compressed formats.
 	///</summary>
 	static ID3D11ShaderResourceView* CreateTexture2DArraySRV(
 		ID3D11Device* device, ID3D11DeviceContext* context,
-		std::vector<std::wstring>& filenames,
-		DXGI_FORMAT format = DXGI_FORMAT_FROM_FILE,
-		UINT filter = D3DX11_FILTER_NONE, 
-		UINT mipFilter = D3DX11_FILTER_LINEAR);
-	*/
+		std::vector<std::wstring>& filenames);
+	/**/
 
 	static ID3D11ShaderResourceView* CreateRandomTexture1DSRV(ID3D11Device* device);
 };

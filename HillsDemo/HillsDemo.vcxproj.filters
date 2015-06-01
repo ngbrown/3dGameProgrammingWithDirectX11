@@ -44,6 +44,9 @@
     <ClInclude Include="Effect.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="TreeSpriteEffect.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="HillsApp.cpp">
@@ -70,6 +73,9 @@
     <ClCompile Include="Effect.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="TreeSpriteEffect.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="LightHelper.hlsli">
@@ -79,6 +85,9 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="Textured.hlsli">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="TreeSprite.hlsli">
       <Filter>Shaders</Filter>
     </None>
   </ItemGroup>
@@ -101,6 +110,18 @@
     <Image Include="Textures\WireFence.dds">
       <Filter>Textures</Filter>
     </Image>
+    <Image Include="Textures\tree0.dds">
+      <Filter>Textures</Filter>
+    </Image>
+    <Image Include="Textures\tree1.dds">
+      <Filter>Textures</Filter>
+    </Image>
+    <Image Include="Textures\tree2.dds">
+      <Filter>Textures</Filter>
+    </Image>
+    <Image Include="Textures\tree3.dds">
+      <Filter>Textures</Filter>
+    </Image>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="BasicPixelShader.hlsl">
@@ -113,6 +134,15 @@
       <Filter>Shaders</Filter>
     </FxCompile>
     <FxCompile Include="TexturedVertexShader.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="TreeSpriteGeometryShader.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="TreeSpriteVertexShader.hlsl">
+      <Filter>Shaders</Filter>
+    </FxCompile>
+    <FxCompile Include="TreeSpritePixelShader.hlsl">
       <Filter>Shaders</Filter>
     </FxCompile>
   </ItemGroup>

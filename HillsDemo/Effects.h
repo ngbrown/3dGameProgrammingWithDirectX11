@@ -3,6 +3,7 @@
 #include <d3dUtil.h>
 #include "BasicEffect.h"
 #include "TexturedEffect.h"
+#include "TreeSpriteEffect.h"
 
 class Effects
 {
@@ -12,5 +13,6 @@ public:
 
 	static BasicEffect* BasicFX;
 	static TexturedEffect* TexturedFX;
+	static TreeSpriteEffect* TreeSpriteFX;
 };
 
